@@ -147,7 +147,7 @@ class PyContainer:
 
         return command_wrapper
 
-    async def _execute_request(self, full_command_args: dict[str, Any]) -> Any:
+    async def _execute_request(self, full_command_args: str) -> Any:
         # curl -X POST https://localhost -H "Content-Type: application/json" -d '{"args": ["ls"]}' -k
 
         logger.debug(f"command args : {full_command_args}")
@@ -158,6 +158,7 @@ class PyContainer:
                 payload={"args": full_command_args},
         ):
             return response.text, response.status_code
+        return None
 
     def __init__(
             self,

@@ -10,10 +10,14 @@ async def test_bad_command():
     with pytest.raises(ValueError):
         docker.run("bad-command")
 
-
 @pytest.mark.asyncio
 async def test_docker_pull():
     print(docker.pull("ubuntu:20.04"))
+
+
+@pytest.mark.asyncio
+async def test_docker_pull_kwargs():
+    print(docker.pull(command="ubuntu:20.04"))
 
 
 @pytest.mark.asyncio

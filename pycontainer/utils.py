@@ -47,7 +47,10 @@ def _build_command_line(cmd_name: str, *args, **kwargs) -> str:
     # Add keyword arguments as flags
     for key, value in kwargs.items():
         if key == "command":
-            cmd_parts.extend(value)
+            if isinstance(value, str):
+                cmd_parts.extend(shlex.split(value))
+            else:
+                cmd_parts.extend(value)
             continue
 
         if key == 'image':
