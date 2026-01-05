@@ -890,7 +890,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "certifi", specifier = ">=2025.4.26" },
+    { name = "certifi", specifier = ">=2026.1.4" },
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pip", specifier = ">=24.2" },
