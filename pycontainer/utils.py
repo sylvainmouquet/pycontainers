@@ -1,8 +1,10 @@
 import re
 import shlex
 
-def clean_result(text:str) -> str:
-    return re.sub(r'\[exit \d+\]\n?$', '', text)
+
+def clean_result(text: str) -> str:
+    return re.sub(r"\[exit \d+\]\n?$", "", text)
+
 
 def get_exit_code(text: str) -> int:
     """Return the exitcode in [exit XXX]."""
@@ -10,70 +12,122 @@ def get_exit_code(text: str) -> int:
     last_20 = text[-20:]
 
     # Extract [exit N] using regex
-    match = re.search(r'\[exit (\d+)\]', last_20)
+    match = re.search(r"\[exit (\d+)\]", last_20)
     if match:
         exit_code = int(match.group(1))
         return exit_code
     return -1
 
 
-def _build_command_line(cmd_name: str, *args, **kwargs) -> str:
+def _build_command_line(cmd_name: str, *args, **kwargs) -> list[str]:
     """Build command line string from arguments."""
     cmd_parts = [cmd_name]
+    generic_options: list[str] = []
+    entrypoint_options: list[str] = []
+    image: str | None = None
+    command: list[str] = []
+    post_image_parts: list[str] = []
+    positional_parts: list[str] = []
 
-    # Add positional arguments
+    # Positional args are kept separate so command-specific ordering stays correct.
     for arg in args:
-        if arg == "filters":
-            arg = "filter"
-        if arg == 'image':
-            cmd_parts.append(arg)
-            continue
         if isinstance(arg, dict):
-            # Handle dictionary arguments - convert to command line flags
             for key, value in arg.items():
-                if isinstance(value, bool) and value:
-                    cmd_parts.append(f"--{key}")
-                elif isinstance(value, bool) and not value:
-                    # Skip false boolean flags
-                    continue
+                key_formatted = "filter" if key == "filters" else key.replace("_", "-")
+                if isinstance(value, bool):
+                    if value:
+                        positional_parts.append(f"--{key_formatted}")
                 elif value is not None:
-                    cmd_parts.extend([f"--{key}", str(value)])
-        else:
-            if hasattr(arg, "ID"):
-                cmd_parts.append(str(arg.ID))
-            else:
-                cmd_parts.append(str(arg))
+                    positional_parts.extend([f"--{key_formatted}", str(value)])
+            continue
 
-    # Add keyword arguments as flags
+        value = str(arg.ID) if hasattr(arg, "ID") else str(arg)
+        if cmd_name == "run" and image is None:
+            image = value
+        else:
+            positional_parts.append(value)
+
     for key, value in kwargs.items():
         if key == "command":
             if isinstance(value, str):
-                cmd_parts.extend(shlex.split(value))
+                command.extend(shlex.split(value))
             else:
-                cmd_parts.extend(value)
+                command.extend([str(v) for v in value])
             continue
 
-        if key == 'image':
-            cmd_parts.append(value)
+        if key == "image":
+            image = str(value)
             continue
 
-        if key == "filters":
-            key = "filter"
-
-        key_formatted = key.replace("_", "-")  # Convert underscores to hyphens
-        if isinstance(value, bool) and value:
-            cmd_parts.insert(1, f"--{key_formatted}")
-        elif isinstance(value, bool) and not value:
-            # Skip false boolean flags
+        if key == "entrypoint":
+            entrypoint_options.extend(["--entrypoint", str(value)])
             continue
+
+        if key == "volumes":
+            for one, two in value:
+                post_image_parts.extend(["-v", f"{one}:{two}"])
+            continue
+
+        if key == "expose":
+            for port in value:
+                post_image_parts.extend(["--expose", str(port)])
+            continue
+
+        if key == "publish":
+            for one, two in value:
+                post_image_parts.extend(["-p", f"{one}:{two}"])
+            continue
+
+        if key == "cap_add":
+            for cap in value:
+                post_image_parts.append(f"--cap-add={cap}")
+            continue
+
+        if key == "envs":
+            for name, val in value.items():
+                post_image_parts.extend(["-e", f"{name}={val}"])
+            continue
+
+        key_formatted = "filter" if key == "filters" else key.replace("_", "-")
+        if isinstance(value, bool):
+            if value:
+                generic_options = [f"--{key_formatted}", *generic_options]
         elif isinstance(value, dict) and value:
-            multiple_values = f" --{key_formatted} ".join(
-                f"{key}={v}" for key, v in value.items()
-            )
-            cmd_parts.insert(1, f"--{key_formatted} {multiple_values}")
+            option_tokens: list[str] = []
+            for dict_key, dict_value in value.items():
+                option_tokens.extend([f"--{key_formatted}", f"{dict_key}={dict_value}"])
+            generic_options = [*option_tokens, *generic_options]
         elif value is not None:
-            cmd_parts.insert(1, f"--{key_formatted} {value}")
+            generic_options = [f"--{key_formatted}", str(value), *generic_options]
 
     if cmd_name == "ps":
-        cmd_parts.insert(1, "--format=json --no-trunc")
-    return shlex.split(" ".join(cmd_parts))
+        cmd_parts.extend(["--format=json", "--no-trunc"])
+        cmd_parts.extend(generic_options)
+        cmd_parts.extend(positional_parts)
+    elif cmd_name == "run":
+        cmd_parts.extend(entrypoint_options)
+        cmd_parts.extend(generic_options)
+        if image is not None:
+            cmd_parts.append(image)
+        cmd_parts.extend(positional_parts)
+        cmd_parts.extend(post_image_parts)
+    else:
+        cmd_parts.extend(generic_options)
+        cmd_parts.extend(positional_parts)
+        cmd_parts.extend(post_image_parts)
+
+    cmd_parts.extend(command)
+    cmd_parts = [part for part in cmd_parts if part != ""]
+
+    if "-c" in cmd_parts:
+        idx = cmd_parts.index("-c")
+        shell_cmd = " ".join(cmd_parts[idx + 1 :])
+        # Normalize accidental extra wrapper quotes, e.g. "'sleep 60s'".
+        if len(shell_cmd) >= 2 and (
+            (shell_cmd.startswith("'") and shell_cmd.endswith("'"))
+            or (shell_cmd.startswith('"') and shell_cmd.endswith('"'))
+        ):
+            shell_cmd = shell_cmd[1:-1]
+        cmd_parts = cmd_parts[: idx + 1] + [shell_cmd]
+
+    return cmd_parts

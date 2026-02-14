@@ -10,6 +10,7 @@ async def test_bad_command():
     with pytest.raises(ValueError):
         docker.run("bad-command")
 
+
 @pytest.mark.asyncio
 async def test_docker_pull():
     print(docker.pull("ubuntu:20.04"))
@@ -50,6 +51,7 @@ async def test_docker_run():
     assert len(containers) == 1
     assert docker.rm(name) == str(name)
 
+
 @pytest.mark.asyncio
 async def test_docker_run_with_execute():
     name = uuid.uuid4()
@@ -58,9 +60,10 @@ async def test_docker_run_with_execute():
         name=name,
         detach=True,
         entrypoint="/bin/sh",
-        command=["-c", "'sleep 60s'"],
+        command=["-c", "sleep 60"],
     )
     container.execute("echo 'hello world'")
+    container.execute(["echo", "'hello world'"])
 
     containers = docker.ps(all=True, filter={"name": f"^{name}"})
     assert len(containers) == 1
@@ -70,6 +73,7 @@ async def test_docker_run_with_execute():
 
     containers = docker.ps(all=True, filter={"name": f"^{name}"})
     assert len(containers) == 0
+
 
 @pytest.mark.asyncio
 async def test_docker_run_and_kill():

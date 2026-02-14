@@ -1,7 +1,4 @@
 import asyncio
-import socket
-import threading
-import time
 import weakref
 from typing import Any
 from proxycraft import ProxyCraft
@@ -21,33 +18,22 @@ logger = get_logger(__name__)
 CONFIGURATION = {
     "version": "1.0",
     "name": "PyContainer",
-    "server": {
-        "type": "local"
-    },
+    "server": {"type": "local"},
     "endpoints": [
         {
             "backends": {
-                "command": {
-                    "darwin": "docker",
-                    "default": "docker",
-                    "id": "docker"
-                }
+                "command": {"darwin": "docker", "default": "docker", "id": "docker"}
             },
             "identifier": "/docker",
             "match": "/docker/**",
             "prefix": "/docker",
-            "upstream": {
-                "proxy": {
-                    "enabled": True
-                }
-            }
+            "upstream": {"proxy": {"enabled": True}},
         }
-    ]
+    ],
 }
 
 
 class Container:
-
     def __init__(self, parent, data: dict[str, Any] | None = None, **kwargs):
         """
         Initialize container with data from dict or kwargs
@@ -67,6 +53,8 @@ class Container:
         for key, value in kwargs.items():
             self._set_attribute(key, value)
 
+        self._data = data
+
     def _set_attribute(self, key: str, value: Any) -> None:
         setattr(self, key, value)
 
@@ -76,8 +64,25 @@ class Container:
 
     def __getattr__(self, command: str, *args, **kwargs) -> Any:
         def command_wrapper(*args, **kwargs):
-            full_command_args = _build_command_line(f"{command if command != 'execute' else 'exec'} {self.ID}", *args,
-                                                    **kwargs)
+            docker_subcommand = "exec" if command == "execute" else command
+            command_args = args
+            # `docker exec` treats a single string as an executable path.
+            # Route plain string commands through a shell to preserve expected behavior.
+            if (
+                docker_subcommand == "exec"
+                and len(args) == 1
+                and not kwargs
+            ):
+                if isinstance(args[0], str):
+                    command_args = ("sh", "-c", args[0])
+                elif isinstance(args[0], (list, tuple)):
+                    command_args = tuple(str(part) for part in args[0])
+            full_command_args = _build_command_line(
+                docker_subcommand,
+                self.ID,
+                *command_args,
+                **kwargs,
+            )
 
             result, command_status = asyncio.run(
                 self.parent._execute_request(full_command_args=full_command_args)
@@ -90,6 +95,11 @@ class Container:
 
             return result_cleaned
 
+        # it's a member
+        if self._data and command in self._data:
+            return self._data[command]
+
+        # it's a function
         return command_wrapper
 
 
@@ -98,13 +108,13 @@ class PyContainer:
         transport = httpx.ASGITransport(app=app)
 
         async with httpx.AsyncClient(
-                transport=transport, base_url="http://pycontainer"
+            transport=transport, base_url="http://pycontainer"
         ) as client:
             if stream:
                 async with client.stream(
-                        url="/docker",
-                        method=method,
-                        json=payload,
+                    url="/docker",
+                    method=method,
+                    json=payload,
                 ) as response:
                     response.raise_for_status()
                     yield response
@@ -128,12 +138,11 @@ class PyContainer:
             exit_code = get_exit_code(result)
             result_cleaned = clean_result(result)
 
-
             if exit_code > 0:
                 raise ValueError(result)
 
             if command == "run":
-                return Container(parent=self, ID=result_cleaned.replace('\r\n\n', ''))
+                return Container(parent=self, ID=result_cleaned.replace("\r\n\n", ""))
 
             if command == "ps":
                 # return a list of containers
@@ -143,7 +152,7 @@ class PyContainer:
                         row_json = json.loads(row)
                         containers.append(Container(parent=self, **row_json))
                 return containers
-            return result_cleaned.replace('\r\n\n', '')
+            return result_cleaned.replace("\r\n\n", "")
 
         return command_wrapper
 
@@ -152,25 +161,21 @@ class PyContainer:
 
         logger.debug(f"command args : {full_command_args}")
         async for response in self._session_client(
-                app=self.proxycraft.app,
-                method="GET",
-                stream=False,
-                payload={"args": full_command_args},
+            app=self.proxycraft.app,
+            method="GET",
+            stream=False,
+            payload={"args": full_command_args},
         ):
             return response.text, response.status_code
         return None
 
     def __init__(
-            self,
-            debug: bool = False,
+        self,
+        debug: bool = False,
     ):
         # Initialize the proxy
         self.proxycraft: ProxyCraft = ProxyCraft(config=Config(**CONFIGURATION))
 
-        # Start proxy in a separate daemon thread
-        self.proxy_thread = threading.Thread(
-            target=self.proxycraft.serve, daemon=True, name="ProxyCraftThread"
-        )
         self._initialized = False
         try:
             self.loop = asyncio.get_running_loop()
@@ -185,40 +190,6 @@ class PyContainer:
 
         self.transport = httpx.ASGITransport(app=self.proxycraft.app)
         weakref.finalize(self, self._cleanup_sync, self.proxycraft, self.loop)
-
-        def wait_port_available(host: str, port: int):
-            def _socket_test_connection():
-                try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(1)  # Add timeout to avoid blocking indefinitely
-                    result = s.connect_ex((host, port))
-                    s.close()
-                    return result == 0  # 0 means connection successful
-                except Exception:
-                    return False
-
-            while _socket_test_connection():
-                logger.info(f"waiting for port {port}")
-                time.sleep(1)
-
-        def check_port_available(host: str, port: int):
-            def _socket_test_connection():
-                try:
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.settimeout(1)  # Add timeout to avoid blocking indefinitely
-                    result = s.connect_ex((host, port))
-                    s.close()
-                    return result == 1
-                except Exception:
-                    return True
-
-            while _socket_test_connection():
-                logger.info(f"port {port} is not available")
-                time.sleep(1)
-
-        check_port_available(host="0.0.0.0", port=8080)
-        self.proxy_thread.start()
-        wait_port_available(host="0.0.0.0", port=8080)
 
     async def close(self):
         """Async cleanup method"""
@@ -248,9 +219,6 @@ class PyContainer:
                     ...
                     # If all else fails, at least log the issue
                     # print("Warning: Could not properly close async resources")
-        if hasattr(self, "proxy_thread"):
-            self.proxy_thread.join(timeout=1)
-            # del self.proxycraft
 
     @staticmethod
     def _cleanup_sync(proxy: Any, loop: asyncio.AbstractEventLoop):

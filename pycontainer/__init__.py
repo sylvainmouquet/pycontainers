@@ -13,4 +13,3 @@ docker = PyContainer()
 
 logger = logging.getLogger("pycontainer")
 logger.addHandler(logging.NullHandler())
-
