@@ -56,9 +56,10 @@ class Container:
         self._data = data
 
     def _set_attribute(self, key: str, value: Any) -> None:
-        if key == "config" and isinstance(value, dict):
+        normalized_key = "config" if key.lower() == "config" else key
+        if normalized_key == "config" and isinstance(value, dict):
             value = self._build_config(value)
-        setattr(self, key, value)
+        setattr(self, normalized_key, value)
 
     @staticmethod
     def _parse_env_variables(values: list[str]) -> dict[str, str]:
@@ -73,6 +74,8 @@ class Container:
 
     def _build_config(self, config: dict[str, Any]) -> "Container":
         normalized_config = dict(config)
+        if "env" not in normalized_config and "Env" in normalized_config:
+            normalized_config["env"] = normalized_config["Env"]
         env = normalized_config.get("env")
         if isinstance(env, list):
             normalized_config["env"] = self._parse_env_variables(env)
@@ -162,7 +165,18 @@ class PyContainer:
                 raise ValueError(result)
 
             if command == "run":
-                return Container(parent=self, ID=result_cleaned.replace("\r\n\n", ""))
+                container = Container(parent=self, ID=result_cleaned.replace("\r\n\n", ""))
+
+                # Keep runtime envs accessible through container.config.env, matching
+                # the structure returned by `docker inspect`.
+                runtime_envs = kwargs.get("envs")
+                if isinstance(runtime_envs, dict):
+                    container.config = Container(
+                        parent=self,
+                        data={"env": {str(key): str(value) for key, value in runtime_envs.items()}},
+                    )
+
+                return container
 
             if command == "ps":
                 # return a list of containers

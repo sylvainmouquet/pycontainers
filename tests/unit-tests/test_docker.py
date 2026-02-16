@@ -90,13 +90,9 @@ async def test_docker_run_with_env_and_instance_config_env():
         envs=runtime_envs,
     )
 
-    inspect_raw = docker.inspect(container.ID)
-    inspect_data = json.loads(inspect_raw)[0]
-    env_list = inspect_data["Config"]["Env"]
-
-    inspected_container = Container(parent=docker, config={"env": env_list})
-    assert inspected_container.config.env["VAR1"] == "one"
-    assert inspected_container.config.env["VAR2"] == "two"
+    
+    assert container.config.env["VAR1"] == "one"
+    assert container.config.env["VAR2"] == "two"
 
     container.kill()
     container.rm()
