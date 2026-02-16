@@ -64,8 +64,38 @@ def _build_command_line(cmd_name: str, *args, **kwargs) -> list[str]:
             continue
 
         if key == "volumes":
-            for one, two in value:
-                post_image_parts.extend(["-v", f"{one}:{two}"])
+            if isinstance(value, dict):
+                for host_path, mount in value.items():
+                    container_path: str | None = None
+                    mode: str | None = None
+
+                    if isinstance(mount, dict):
+                        bind = mount.get("bind") or mount.get("target")
+                        if bind is not None:
+                            container_path = str(bind)
+                        if mount.get("mode") is not None:
+                            mode = str(mount["mode"])
+                    elif mount is not None:
+                        container_path = str(mount)
+
+                    if container_path is None:
+                        continue
+
+                    volume_spec = f"{host_path}:{container_path}"
+                    if mode:
+                        volume_spec = f"{volume_spec}:{mode}"
+                    post_image_parts.extend(["-v", volume_spec])
+            else:
+                for mount in value:
+                    if isinstance(mount, (tuple, list)) and len(mount) >= 2:
+                        host_path, container_path = mount[0], mount[1]
+                        mode = str(mount[2]) if len(mount) >= 3 else None
+                        volume_spec = f"{host_path}:{container_path}"
+                        if mode:
+                            volume_spec = f"{volume_spec}:{mode}"
+                        post_image_parts.extend(["-v", volume_spec])
+                    else:
+                        post_image_parts.extend(["-v", str(mount)])
             continue
 
         if key == "expose":
@@ -107,10 +137,10 @@ def _build_command_line(cmd_name: str, *args, **kwargs) -> list[str]:
     elif cmd_name == "run":
         cmd_parts.extend(entrypoint_options)
         cmd_parts.extend(generic_options)
+        cmd_parts.extend(post_image_parts)
         if image is not None:
             cmd_parts.append(image)
         cmd_parts.extend(positional_parts)
-        cmd_parts.extend(post_image_parts)
     else:
         cmd_parts.extend(generic_options)
         cmd_parts.extend(positional_parts)

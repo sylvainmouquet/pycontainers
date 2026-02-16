@@ -56,7 +56,27 @@ class Container:
         self._data = data
 
     def _set_attribute(self, key: str, value: Any) -> None:
+        if key == "config" and isinstance(value, dict):
+            value = self._build_config(value)
         setattr(self, key, value)
+
+    @staticmethod
+    def _parse_env_variables(values: list[str]) -> dict[str, str]:
+        env: dict[str, str] = {}
+        for item in values:
+            if "=" in item:
+                name, value = item.split("=", 1)
+                env[name] = value
+            else:
+                env[item] = ""
+        return env
+
+    def _build_config(self, config: dict[str, Any]) -> "Container":
+        normalized_config = dict(config)
+        env = normalized_config.get("env")
+        if isinstance(env, list):
+            normalized_config["env"] = self._parse_env_variables(env)
+        return Container(parent=self.parent, data=normalized_config)
 
     def __str__(self) -> str:
         """User-friendly string representation"""

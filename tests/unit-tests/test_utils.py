@@ -113,11 +113,25 @@ def test_build_command_line_with_volumes():
     }
     assert _build_command_line("run", *args, **kwargs) == [
         "run",
-        "busybox",
         "-v",
         "/a.sh:/b.sh",
         "-v",
         "/c.json:/d.json",
+        "busybox",
+    ]
+
+
+def test_build_command_line_with_volumes_dict():
+    args = ()
+    kwargs = {
+        "image": "busybox",
+        "volumes": {"/a.sh": {"bind": "/b.sh", "mode": "rw"}},
+    }
+    assert _build_command_line("run", *args, **kwargs) == [
+        "run",
+        "-v",
+        "/a.sh:/b.sh:rw",
+        "busybox",
     ]
 
 
@@ -126,13 +140,13 @@ def test_build_command_line_with_ports():
     kwargs = {"image": "busybox", "expose": [8200, 8900], "publish": [(8201, 8202)]}
     assert _build_command_line("run", *args, **kwargs) == [
         "run",
-        "busybox",
         "--expose",
         "8200",
         "--expose",
         "8900",
         "-p",
         "8201:8202",
+        "busybox",
     ]
 
 
@@ -149,13 +163,13 @@ def test_build_command_line_with_envs():
 
     assert _build_command_line("run", *args, **kwargs) == [
         "run",
-        "busybox",
         "-e",
         "var1=one",
         "-e",
         "var2=two",
         "-e",
         "var3=three",
+        "busybox",
     ]
 
 
@@ -165,7 +179,7 @@ def test_build_command_line_with_cap_add():
 
     assert _build_command_line("run", *args, **kwargs) == [
         "run",
-        "busybox",
         "--cap-add=FIRST",
         "--cap-add=SECOND",
+        "busybox",
     ]

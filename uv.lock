@@ -861,7 +861,7 @@ wheels = [
 
 [[package]]
 name = "pycontainer"
-version = "1.8.0"
+version = "1.11.0"
 source = { editable = "." }
 dependencies = [
     { name = "asgi-lifespan" },
