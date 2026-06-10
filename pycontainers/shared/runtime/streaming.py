@@ -1,7 +1,4 @@
-from collections.abc import AsyncIterator, Callable, Coroutine, Iterator
-from typing import Any, TypeVar
-
-T = TypeVar("T")
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 
 
 async def iter_lines(chunks: AsyncIterator[str]) -> AsyncIterator[str]:
@@ -19,12 +16,12 @@ async def iter_lines(chunks: AsyncIterator[str]) -> AsyncIterator[str]:
 
 
 def sync_iterator(
-    run_coro: Callable[[Coroutine[Any, Any, T]], T],
+    run_awaitable: Callable[[Awaitable[str]], str],
     async_iter: AsyncIterator[str],
 ) -> Iterator[str]:
     """Adapt an async text iterator to a blocking sync iterator."""
     while True:
         try:
-            yield run_coro(async_iter.__anext__())
+            yield run_awaitable(async_iter.__anext__())
         except StopAsyncIteration:
             break

@@ -202,6 +202,7 @@ class PyContainers:
         )
 
         self._initialized = False
+        self._shutdown_done = False
         self._loop_thread: threading.Thread | None = None
         self._owns_background_loop = False
         logger.info("Initializing runtime client", backend=self._backend)
@@ -259,16 +260,22 @@ class PyContainers:
 
     def _shutdown_sync(self) -> None:
         """Stop the client and its background event loop, if any."""
+        if self._shutdown_done:
+            return
+        self._shutdown_done = True
+
         if self._owns_background_loop and self._loop_thread is not None:
             if not self.loop.is_closed():
                 try:
-                    asyncio.run_coroutine_threadsafe(
+                    future = asyncio.run_coroutine_threadsafe(
                         self.proxycraft.shutdown_event(), self.loop
-                    ).result()
+                    )
+                    future.result(timeout=5)
                 except Exception:
                     logger.warning("Runtime client shutdown failed", exc_info=True)
                 self.loop.call_soon_threadsafe(self.loop.stop)
                 self._loop_thread.join(timeout=5)
+            self._loop_thread = None
             return
 
         if self.loop and not self.loop.is_closed() and not self.loop.is_running():
@@ -699,7 +706,8 @@ class PyContainers:
             return
         try:
             if owns_background_loop and loop_thread is not None:
-                asyncio.run_coroutine_threadsafe(proxy.shutdown_event(), loop).result()
+                future = asyncio.run_coroutine_threadsafe(proxy.shutdown_event(), loop)
+                future.result(timeout=5)
                 loop.call_soon_threadsafe(loop.stop)
                 loop_thread.join(timeout=5)
                 return
@@ -709,3 +717,6 @@ class PyContainers:
                 loop.close()
         except Exception:
             logger.warning("Runtime client cleanup failed", exc_info=True)
+            if owns_background_loop and loop_thread is not None and loop.is_running():
+                loop.call_soon_threadsafe(loop.stop)
+                loop_thread.join(timeout=5)
