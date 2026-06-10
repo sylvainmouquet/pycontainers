@@ -5,8 +5,8 @@ import sys
 import threading
 import time
 import weakref
-from collections.abc import AsyncIterator, Coroutine, Iterator, Mapping, Sequence
-from typing import TYPE_CHECKING, Any, TypeVar
+from collections.abc import AsyncIterator, Awaitable, Coroutine, Iterator, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import httpx
 from proxycraft import ProxyCraft
@@ -240,7 +240,7 @@ class PyContainers:
         asyncio.set_event_loop(loop)
         loop.run_forever()
 
-    def _run_sync(self, coro: Coroutine[Any, Any, T]) -> T:
+    def _run_sync(self, awaitable: Awaitable[T]) -> T:
         """Run a coroutine from synchronous code."""
         try:
             asyncio.get_running_loop()
@@ -250,13 +250,15 @@ class PyContainers:
             has_running_loop = True
 
         if self._owns_background_loop:
-            future = asyncio.run_coroutine_threadsafe(coro, self.loop)
+            future = asyncio.run_coroutine_threadsafe(
+                cast(Coroutine[Any, Any, T], awaitable), self.loop
+            )
             return future.result()
 
         if has_running_loop:
-            return run_coro_in_thread(coro)
+            return run_coro_in_thread(awaitable)
 
-        return self.loop.run_until_complete(coro)
+        return self.loop.run_until_complete(awaitable)
 
     def _shutdown_sync(self) -> None:
         """Stop the client and its background event loop, if any."""
