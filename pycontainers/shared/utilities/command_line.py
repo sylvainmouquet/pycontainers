@@ -17,7 +17,9 @@ def get_exit_code(text: str) -> int:
     return -1
 
 
-def _build_command_line(cmd_name: str, *args, **kwargs) -> list[str]:
+def _build_command_line(
+    cmd_name: str, *args, skip_ps_defaults: bool = False, **kwargs
+) -> list[str]:
     """Build command line string from arguments."""
     cmd_parts = [cmd_name]
     generic_options: list[str] = []
@@ -127,7 +129,7 @@ def _build_command_line(cmd_name: str, *args, **kwargs) -> list[str]:
         elif value is not None:
             generic_options = [f"--{key_formatted}", str(value), *generic_options]
 
-    if cmd_name == "ps":
+    if cmd_name == "ps" and not skip_ps_defaults:
         cmd_parts.extend(["--format=json", "--no-trunc"])
         cmd_parts.extend(generic_options)
         cmd_parts.extend(positional_parts)

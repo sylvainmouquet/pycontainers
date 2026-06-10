@@ -3,13 +3,15 @@ import uuid
 
 import pytest
 
-from pycontainers import docker
+from pycontainers import CommandError, docker
 
 
 @pytest.mark.asyncio
 async def test_bad_command():
-    with pytest.raises(ValueError):
+    with pytest.raises(CommandError) as exc_info:
         docker.run("bad-command")
+    assert exc_info.value.subcommand == "run"
+    assert exc_info.value.exit_code > 0
 
 
 @pytest.mark.asyncio

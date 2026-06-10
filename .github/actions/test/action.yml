@@ -26,6 +26,9 @@ runs:
         VERSION: 0.0.1
       run: just build
       shell: bash
+    - name: Run pyright
+      run: just check
+      shell: bash
     - name: Run tests
       run: |
         just test
