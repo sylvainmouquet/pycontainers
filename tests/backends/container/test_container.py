@@ -3,17 +3,22 @@ import uuid
 
 import pytest
 
-from pycontainers import CommandError, docker
-
-from tests.backends.markers import requires_container
+from pycontainers.shared.runtime.macos_commands import is_macos_container_available
 
 pytestmark = [
-    requires_container,
     pytest.mark.skipif(
         sys.platform != "darwin",
         reason="Apple container CLI integration tests run only on macOS",
     ),
 ]
+
+if not is_macos_container_available():
+    pytest.skip(
+        "Apple container CLI is unavailable or not connected",
+        allow_module_level=True,
+    )
+
+from pycontainers import CommandError, docker
 
 
 def _containers_named(containers: list, name: uuid.UUID) -> list:

@@ -26,7 +26,7 @@ def test_cleanup_sync_logs_warning_instead_of_print(capsys):
     proxy = MagicMock()
     proxy.shutdown_event = AsyncMock(side_effect=RuntimeError("shutdown failed"))
 
-    PyContainers._cleanup_sync(proxy, loop)
+    PyContainers._cleanup_sync(proxy, loop, None, False)
 
     captured = capsys.readouterr().out
     assert "Runtime client cleanup failed" in captured

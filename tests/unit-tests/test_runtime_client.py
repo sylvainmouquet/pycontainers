@@ -522,7 +522,7 @@ def test_cleanup_sync_success():
     loop = asyncio.new_event_loop()
     proxy = MagicMock()
     proxy.shutdown_event = AsyncMock(return_value=None)
-    PyContainers._cleanup_sync(proxy, loop)
+    PyContainers._cleanup_sync(proxy, loop, None, False)
     assert loop.is_closed()
 
 

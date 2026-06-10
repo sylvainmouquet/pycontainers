@@ -26,6 +26,9 @@ class MockRuntimeParent:
         self.execute_responses: list[tuple[str, int]] = []
         self.stream_chunks: list[str] = []
 
+    def _run_sync(self, coro):
+        return self.loop.run_until_complete(coro)
+
     async def _execute_request(
         self,
         full_command_args: list[str],
