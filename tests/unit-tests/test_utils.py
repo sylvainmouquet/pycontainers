@@ -120,6 +120,13 @@ def test_parse_container_ps_json_docker_ndjson():
     assert rows == [{"ID": "abc", "Names": "demo"}, {"ID": "def", "Names": "other"}]
 
 
+def test_parse_container_ps_json_skips_blank_ndjson_lines():
+    row_one = '{"ID":"abc","Names":"demo"}'
+    row_two = '{"ID":"def","Names":"other"}'
+    rows = parse_container_ps_json(f"{row_one}\n\n{row_two}\n")
+    assert rows == [{"ID": "abc", "Names": "demo"}, {"ID": "def", "Names": "other"}]
+
+
 def test_parse_container_ps_json_podman_array():
     payload = '[{"ID":"abc","Names":"demo"},{"ID":"def","Names":"other"}]'
     rows = parse_container_ps_json(payload)
@@ -138,6 +145,10 @@ def test_parse_container_ps_json_empty():
 
 def test_extract_run_container_id_simple():
     assert extract_run_container_id("abc123\n") == "abc123"
+
+
+def test_extract_run_container_id_empty_result():
+    assert extract_run_container_id("") == ""
 
 
 def test_extract_run_container_id_podman_pull_output():

@@ -9,6 +9,8 @@ Alternative to docker-py and python-on-whales</p>
 
 ## Installation
 
+Requires Python 3.10–3.14.
+
 ```bash
 pip install pycontainers
 ```

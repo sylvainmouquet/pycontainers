@@ -720,6 +720,8 @@ class PyContainers:
                     loop.call_soon_threadsafe(loop.stop)
                 loop_thread.join(timeout=1)
                 return
+            if loop.is_running():
+                return
             asyncio.set_event_loop(loop)
             loop.run_until_complete(proxy.shutdown_event())
             if not loop.is_running():

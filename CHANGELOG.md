@@ -8,13 +8,13 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- Minimum supported Python version raised to 3.14
+- Supported Python versions: 3.10 through 3.14
 - ProxyCraft dependency uses editable local path (`../proxycraft`) for development; CI clones the repository alongside the workspace when the checkout is missing
 
 ### Fixed
 
 - Docker backend on Linux: set explicit `linux` command in ProxyCraft config so proxycraft does not resolve a `None` platform override instead of `default`
-- Sync runtime calls from async contexts (for example pytest-asyncio backend tests) no longer fail with `sniffio.AsyncLibraryNotFoundError` on Python 3.14
+- Sync runtime calls from async contexts (for example pytest-asyncio backend tests) no longer fail with `sniffio.AsyncLibraryNotFoundError`
 
 ### Removed
 

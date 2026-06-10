@@ -81,6 +81,18 @@ def test_run_sync_uses_existing_stopped_loop():
 
 
 @pytest.mark.asyncio
+async def test_run_sync_uses_thread_from_async_context():
+    client = PyContainers.__new__(PyContainers)
+    client._owns_background_loop = False
+    client.loop = asyncio.get_running_loop()
+
+    async def value():
+        return "ok"
+
+    assert client._run_sync(value()) == "ok"
+
+
+@pytest.mark.asyncio
 async def test_session_client_non_stream_mode():
     mock_response = MagicMock()
     mock_response.raise_for_status = MagicMock()
@@ -604,6 +616,17 @@ def test_shutdown_sync_stopped_loop_handles_shutdown_error():
 def test_cleanup_sync_closed_loop_returns():
     loop = MagicMock()
     loop.is_closed.return_value = True
+    proxy = MagicMock()
+
+    PyContainers._cleanup_sync(proxy, loop, None, False)
+
+    proxy.shutdown_event.assert_not_called()
+
+
+def test_cleanup_sync_running_unowned_loop_returns():
+    loop = MagicMock()
+    loop.is_closed.return_value = False
+    loop.is_running.return_value = True
     proxy = MagicMock()
 
     PyContainers._cleanup_sync(proxy, loop, None, False)

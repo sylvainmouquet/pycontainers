@@ -61,7 +61,7 @@ On macOS, the docker endpoint resolves at runtime: Colima, Docker Desktop, or an
 
 - **ProxyCraft** — proxies HTTP requests to local CLI processes
 - **httpx** — ASGI transport for in-process ProxyCraft calls
-- **Background asyncio loop** — sync APIs schedule work on a dedicated event loop so httpx ASGI transport works from async test runners on Python 3.14
+- **Background asyncio loop** — sync APIs schedule work on a dedicated event loop so httpx ASGI transport works from async test runners (Python 3.10–3.14)
 
 ## Streaming output
 
