@@ -2,13 +2,13 @@ import asyncio
 import copy
 import json
 import sys
+import threading
 import time
 import weakref
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
-from typing import TYPE_CHECKING, Any
+from collections.abc import AsyncIterator, Coroutine, Iterator, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import httpx
-import nest_asyncio
 from proxycraft import ProxyCraft
 from proxycraft.features.configuration.models import Config
 
@@ -41,12 +41,13 @@ from pycontainers.shared.utilities import (
     extract_run_container_id,
     get_exit_code,
     parse_container_ps_json,
+    run_coro_in_thread,
 )
 
 if TYPE_CHECKING:
     from pycontainers.features.compose.client import _ComposeAccessor
 
-nest_asyncio.apply()
+T = TypeVar("T")
 
 logger = get_logger(__name__)
 
@@ -201,19 +202,82 @@ class PyContainers:
         )
 
         self._initialized = False
+        self._loop_thread: threading.Thread | None = None
+        self._owns_background_loop = False
         logger.info("Initializing runtime client", backend=self._backend)
         try:
             self.loop = asyncio.get_running_loop()
             self.startup_task = asyncio.create_task(self.proxycraft.startup_event())
             logger.debug("Runtime client using existing asyncio event loop")
         except RuntimeError:
-            logger.debug("Runtime client creating new asyncio event loop")
             self.loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self.loop)
-            self.loop.run_until_complete(self.proxycraft.startup_event())
+            self._owns_background_loop = True
+            self._loop_thread = threading.Thread(
+                target=self._run_loop_forever,
+                args=(self.loop,),
+                daemon=True,
+                name=f"pycontainers-{self._backend}",
+            )
+            self._loop_thread.start()
+            logger.debug("Runtime client creating background asyncio event loop")
+            asyncio.run_coroutine_threadsafe(
+                self.proxycraft.startup_event(), self.loop
+            ).result()
 
         self.transport = httpx.ASGITransport(app=self.proxycraft.app)
-        weakref.finalize(self, self._cleanup_sync, self.proxycraft, self.loop)
+        weakref.finalize(
+            self,
+            self._cleanup_sync,
+            self.proxycraft,
+            self.loop,
+            self._loop_thread,
+            self._owns_background_loop,
+        )
+
+    @staticmethod
+    def _run_loop_forever(loop: asyncio.AbstractEventLoop) -> None:
+        asyncio.set_event_loop(loop)
+        loop.run_forever()
+
+    def _run_sync(self, coro: Coroutine[Any, Any, T]) -> T:
+        """Run a coroutine from synchronous code."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            has_running_loop = False
+        else:
+            has_running_loop = True
+
+        if self._owns_background_loop:
+            future = asyncio.run_coroutine_threadsafe(coro, self.loop)
+            return future.result()
+
+        if has_running_loop:
+            return run_coro_in_thread(coro)
+
+        return self.loop.run_until_complete(coro)
+
+    def _shutdown_sync(self) -> None:
+        """Stop the client and its background event loop, if any."""
+        if self._owns_background_loop and self._loop_thread is not None:
+            if not self.loop.is_closed():
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        self.proxycraft.shutdown_event(), self.loop
+                    ).result()
+                except Exception:
+                    logger.warning("Runtime client shutdown failed", exc_info=True)
+                self.loop.call_soon_threadsafe(self.loop.stop)
+                self._loop_thread.join(timeout=5)
+            return
+
+        if self.loop and not self.loop.is_closed() and not self.loop.is_running():
+            try:
+                self.loop.run_until_complete(self.proxycraft.shutdown_event())
+            except Exception:
+                logger.warning("Runtime client shutdown failed", exc_info=True)
+            finally:
+                self.loop.close()
 
     @property
     def backend(self) -> RuntimeBackend:
@@ -466,13 +530,16 @@ class PyContainers:
     def _sync_stream(
         self, subcommand: str, *args: Any, **kwargs: Any
     ) -> Iterator[str]:
-        return sync_iterator(self.loop, self._dispatch_stream(subcommand, *args, **kwargs))
+        return sync_iterator(
+            self._run_sync, self._dispatch_stream(subcommand, *args, **kwargs)
+        )
 
     def _sync_stream_lines(
         self, subcommand: str, *args: Any, **kwargs: Any
     ) -> Iterator[str]:
         return sync_iterator(
-            self.loop, self._dispatch_stream_lines(subcommand, *args, **kwargs)
+            self._run_sync,
+            self._dispatch_stream_lines(subcommand, *args, **kwargs),
         )
 
     def stream(self, subcommand: str, *args: Any, **kwargs: Any) -> Iterator[str]:
@@ -518,7 +585,7 @@ class PyContainers:
             cap_add=cap_add,
             extra=extra,
         )
-        return asyncio.run(self._dispatch_command("run", image, *args, **kwargs))
+        return self._run_sync(self._dispatch_command("run", image, *args, **kwargs))
 
     def ps(
         self,
@@ -534,7 +601,7 @@ class PyContainers:
             filters=filters,
             extra=extra,
         )
-        return asyncio.run(self._dispatch_command("ps", *args, **kwargs))
+        return self._run_sync(self._dispatch_command("ps", *args, **kwargs))
 
     def pull(
         self,
@@ -547,7 +614,7 @@ class PyContainers:
         if image is None and command is None:
             raise TypeError("pull() requires an image positional argument or command=")
         pull_target = image if image is not None else ""
-        return asyncio.run(self._dispatch_command("pull", pull_target, **kwargs))
+        return self._run_sync(self._dispatch_command("pull", pull_target, **kwargs))
 
     @property
     def aio(self) -> _AsyncCommandAccessor:
@@ -571,7 +638,7 @@ class PyContainers:
         def command_wrapper(*args, **kwargs):
             if subcommand == "logs" and kwargs.get("follow"):
                 return self._sync_stream_lines("logs", *args, **kwargs)
-            return asyncio.run(self._dispatch_command(subcommand, *args, **kwargs))
+            return self._run_sync(self._dispatch_command(subcommand, *args, **kwargs))
 
         return command_wrapper
 
@@ -621,12 +688,24 @@ class PyContainers:
         logger.info("Runtime client closed", backend=self._backend)
 
     @staticmethod
-    def _cleanup_sync(proxy: Any, loop: asyncio.AbstractEventLoop):
+    def _cleanup_sync(
+        proxy: Any,
+        loop: asyncio.AbstractEventLoop,
+        loop_thread: threading.Thread | None,
+        owns_background_loop: bool,
+    ):
         """Static cleanup method for weakref.finalize"""
-        if loop and not loop.is_closed():
-            try:
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(proxy.shutdown_event())
+        if not loop or loop.is_closed():
+            return
+        try:
+            if owns_background_loop and loop_thread is not None:
+                asyncio.run_coroutine_threadsafe(proxy.shutdown_event(), loop).result()
+                loop.call_soon_threadsafe(loop.stop)
+                loop_thread.join(timeout=5)
+                return
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(proxy.shutdown_event())
+            if not loop.is_running():
                 loop.close()
-            except Exception:
-                logger.warning("Runtime client cleanup failed", exc_info=True)
+        except Exception:
+            logger.warning("Runtime client cleanup failed", exc_info=True)

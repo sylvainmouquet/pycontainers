@@ -1,4 +1,3 @@
-import asyncio
 from typing import TYPE_CHECKING, Any
 
 from pycontainers.shared.logging import get_logger
@@ -78,7 +77,9 @@ class ComposeService:
             )
 
         def command_wrapper(*args, **kwargs):
-            return asyncio.run(self._dispatch_command(subcommand, *args, **kwargs))
+            return self.compose.parent._run_sync(
+                self._dispatch_command(subcommand, *args, **kwargs)
+            )
 
         return command_wrapper
 

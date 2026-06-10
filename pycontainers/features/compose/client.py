@@ -1,4 +1,3 @@
-import asyncio
 import json
 import time
 from typing import TYPE_CHECKING, Any
@@ -292,7 +291,9 @@ class ComposeClient:
             )
 
         def command_wrapper(*args, **kwargs):
-            return asyncio.run(self._dispatch_command(subcommand, *args, **kwargs))
+            return self.parent._run_sync(
+                self._dispatch_command(subcommand, *args, **kwargs)
+            )
 
         return command_wrapper
 

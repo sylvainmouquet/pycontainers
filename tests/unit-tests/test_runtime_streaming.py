@@ -31,11 +31,14 @@ def test_sync_iterator_adapts_async_generator():
         yield "a"
         yield "b"
 
-    loop = asyncio.new_event_loop()
-    try:
-        assert list(sync_iterator(loop, chunks())) == ["a", "b"]
-    finally:
-        loop.close()
+    def run_coro(coro):
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+
+    assert list(sync_iterator(run_coro, chunks())) == ["a", "b"]
 
 
 @pytest.mark.asyncio

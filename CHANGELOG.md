@@ -14,8 +14,11 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 
 - Docker backend on Linux: set explicit `linux` command in ProxyCraft config so proxycraft does not resolve a `None` platform override instead of `default`
+- Sync runtime calls from async contexts (for example pytest-asyncio backend tests) no longer fail with `sniffio.AsyncLibraryNotFoundError` on Python 3.14
 
 ### Removed
+
+- `nest-asyncio` dependency; sync dispatch now uses a dedicated background event loop instead
 
 ## [2.0.0] - 2026-06-10
 

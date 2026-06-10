@@ -13,12 +13,7 @@ def docker_client() -> PyContainers:
     """Runtime client for unit tests that does not require a CLI on PATH."""
     client = PyContainers(backend="docker")
     yield client
-    if hasattr(client, "loop") and isinstance(client.loop, asyncio.AbstractEventLoop):
-        if not client.loop.is_closed():
-            try:
-                client.loop.run_until_complete(client.close())
-            finally:
-                client.loop.close()
+    client._shutdown_sync()
 
 
 class MockRuntimeParent:

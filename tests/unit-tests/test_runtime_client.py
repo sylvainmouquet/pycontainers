@@ -57,6 +57,16 @@ async def test_pycontainers_uses_running_event_loop():
 
 
 @pytest.mark.asyncio
+async def test_sync_dispatch_from_async_context(docker_client):
+    with patch.object(
+        docker_client,
+        "_dispatch_command",
+        new=AsyncMock(return_value=[]),
+    ):
+        assert docker_client.ps() == []
+
+
+@pytest.mark.asyncio
 async def test_session_client_non_stream_mode():
     mock_response = MagicMock()
     mock_response.raise_for_status = MagicMock()

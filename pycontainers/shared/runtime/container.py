@@ -1,4 +1,3 @@
-import asyncio
 import time
 from collections.abc import AsyncIterator, Iterator
 from typing import Any
@@ -201,14 +200,15 @@ class Container:
 
     def _sync_stream(self, subcommand: str, *args: Any, **kwargs: Any) -> Iterator[str]:
         return sync_iterator(
-            self.parent.loop, self._dispatch_stream(subcommand, *args, **kwargs)
+            self.parent._run_sync,
+            self._dispatch_stream(subcommand, *args, **kwargs),
         )
 
     def _sync_stream_lines(
         self, subcommand: str, *args: Any, **kwargs: Any
     ) -> Iterator[str]:
         return sync_iterator(
-            self.parent.loop,
+            self.parent._run_sync,
             self._dispatch_stream_lines(subcommand, *args, **kwargs),
         )
 
@@ -243,6 +243,8 @@ class Container:
         def command_wrapper(*args, **kwargs):
             if subcommand == "logs" and kwargs.get("follow"):
                 return self._sync_stream_lines("logs", *args, **kwargs)
-            return asyncio.run(self._dispatch_command(subcommand, *args, **kwargs))
+            return self.parent._run_sync(
+                self._dispatch_command(subcommand, *args, **kwargs)
+            )
 
         return command_wrapper
