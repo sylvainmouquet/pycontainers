@@ -616,28 +616,6 @@ class PyContainers:
         await self.proxycraft.shutdown_event()
         logger.info("Runtime client closed", backend=self._backend)
 
-    def __del__(self):
-        """Synchronous cleanup - calls async close() properly"""
-        try:
-            current_loop = asyncio.get_running_loop()
-            current_loop.create_task(self.close())
-        except RuntimeError:
-            loop = getattr(self, "loop", None)
-            if isinstance(loop, asyncio.AbstractEventLoop) and not loop.is_closed():
-                asyncio.set_event_loop(self.loop)
-                try:
-                    self.loop.run_until_complete(self.close())
-                finally:
-                    self.loop.close()
-            else:
-                try:
-                    asyncio.run(self.close())
-                except Exception:
-                    logger.exception(
-                        "Runtime client cleanup failed during deletion",
-                        backend=getattr(self, "_backend", None),
-                    )
-
     @staticmethod
     def _cleanup_sync(proxy: Any, loop: asyncio.AbstractEventLoop):
         """Static cleanup method for weakref.finalize"""

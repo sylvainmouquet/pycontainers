@@ -3,6 +3,7 @@ import json
 import time
 from typing import TYPE_CHECKING, Any
 
+from pycontainers.features.compose.detection import ComposeInvocation
 from pycontainers.features.compose.service import ComposeService
 from pycontainers.shared.errors import CommandError
 from pycontainers.shared.logging import get_logger
@@ -13,7 +14,6 @@ from pycontainers.shared.utilities import (
 )
 
 if TYPE_CHECKING:
-    from pycontainers.features.compose.detection import ComposeInvocation
     from pycontainers.shared.runtime.client import PyContainers
     from pycontainers.shared.runtime.detection import RuntimeBackend
 
@@ -62,7 +62,7 @@ class ComposeClient:
         project_directory: str | None = None,
         env_file: str | list[str] | tuple[str, ...] | None = None,
         profiles: str | list[str] | tuple[str, ...] | None = None,
-        invocation: "ComposeInvocation | None" = None,
+        invocation: ComposeInvocation | None = None,
     ) -> None:
         self.parent = parent
         self._file = file
@@ -70,14 +70,14 @@ class ComposeClient:
         self._project_directory = project_directory
         self._env_file = env_file
         self._profiles = profiles
-        self._invocation_override = invocation
+        self._invocation_override: ComposeInvocation | None = invocation
 
     @property
     def backend(self) -> "RuntimeBackend":
         return self.parent.backend
 
     @property
-    def invocation(self) -> "ComposeInvocation":
+    def invocation(self) -> ComposeInvocation:
         from pycontainers.features.compose.detection import resolve_compose_invocation
 
         if self._invocation_override is not None:
