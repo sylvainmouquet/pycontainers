@@ -4,7 +4,7 @@ from pycontainers import docker
 
 
 async def main():
-    output = docker.run(command="hello-world", volumes=["/tmp", "/var/tmp"])
+    output = docker.run("hello-world", volumes=["/tmp", "/var/tmp"])
     print(output)
 
     print(docker.pull("ubuntu:20.04"))  # Predefined method

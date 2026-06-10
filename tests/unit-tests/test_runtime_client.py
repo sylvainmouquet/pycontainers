@@ -66,6 +66,20 @@ async def test_sync_dispatch_from_async_context(docker_client):
         assert docker_client.ps() == []
 
 
+def test_run_sync_uses_existing_stopped_loop():
+    client = PyContainers.__new__(PyContainers)
+    client._owns_background_loop = False
+    client.loop = asyncio.new_event_loop()
+
+    async def value():
+        return "ok"
+
+    try:
+        assert client._run_sync(value()) == "ok"
+    finally:
+        client.loop.close()
+
+
 @pytest.mark.asyncio
 async def test_session_client_non_stream_mode():
     mock_response = MagicMock()
@@ -536,6 +550,109 @@ def test_cleanup_sync_timeout_does_not_warn(capsys):
     captured = capsys.readouterr().out
     assert "Runtime client cleanup failed" not in captured
     loop.close()
+
+
+def test_shutdown_sync_is_idempotent():
+    client = PyContainers.__new__(PyContainers)
+    client._shutdown_done = True
+    client.loop = MagicMock()
+    client._shutdown_sync()
+    client.loop.is_closed.assert_not_called()
+
+
+def test_shutdown_sync_background_loop_handles_shutdown_error():
+    client = PyContainers.__new__(PyContainers)
+    client._shutdown_done = False
+    client._owns_background_loop = True
+    client.loop = MagicMock()
+    client.loop.is_closed.return_value = False
+    client.loop.is_running.return_value = True
+    client.proxycraft = MagicMock()
+    client.proxycraft.shutdown_event = MagicMock(return_value=object())
+    loop_thread = MagicMock()
+    client._loop_thread = loop_thread
+    future = MagicMock()
+    future.result.side_effect = RuntimeError("timeout")
+
+    with patch(
+        "pycontainers.shared.runtime.client.asyncio.run_coroutine_threadsafe",
+        return_value=future,
+    ):
+        client._shutdown_sync()
+
+    client.loop.call_soon_threadsafe.assert_called_once_with(client.loop.stop)
+    loop_thread.join.assert_called_once_with(timeout=1)
+    assert client._loop_thread is None
+
+
+def test_shutdown_sync_stopped_loop_handles_shutdown_error():
+    client = PyContainers.__new__(PyContainers)
+    client._shutdown_done = False
+    client._owns_background_loop = False
+    client.loop = MagicMock()
+    client.loop.is_closed.return_value = False
+    client.loop.is_running.return_value = False
+    client.loop.run_until_complete.side_effect = RuntimeError("shutdown failed")
+    client.proxycraft = MagicMock()
+    client.proxycraft.shutdown_event = MagicMock(return_value=object())
+
+    client._shutdown_sync()
+
+    client.loop.close.assert_called_once()
+
+
+def test_cleanup_sync_closed_loop_returns():
+    loop = MagicMock()
+    loop.is_closed.return_value = True
+    proxy = MagicMock()
+
+    PyContainers._cleanup_sync(proxy, loop, None, False)
+
+    proxy.shutdown_event.assert_not_called()
+
+
+def test_cleanup_sync_background_inner_error_stops_loop():
+    loop = MagicMock()
+    loop.is_closed.return_value = False
+    loop.is_running.return_value = True
+    proxy = MagicMock()
+    proxy.shutdown_event = MagicMock(return_value=object())
+    loop_thread = MagicMock()
+
+    with patch(
+        "pycontainers.shared.runtime.client.asyncio.run_coroutine_threadsafe",
+        side_effect=RuntimeError("submit failed"),
+    ):
+        PyContainers._cleanup_sync(proxy, loop, loop_thread, True)
+
+    loop.call_soon_threadsafe.assert_called_once_with(loop.stop)
+    loop_thread.join.assert_called_once_with(timeout=1)
+
+
+def test_cleanup_sync_timeout_outer_branch_stops_loop():
+    loop = MagicMock()
+    loop.is_closed.return_value = False
+    loop.is_running.side_effect = [concurrent.futures.TimeoutError(), True]
+    proxy = MagicMock()
+    loop_thread = MagicMock()
+
+    PyContainers._cleanup_sync(proxy, loop, loop_thread, True)
+
+    loop.call_soon_threadsafe.assert_called_once_with(loop.stop)
+    loop_thread.join.assert_called_once_with(timeout=1)
+
+
+def test_cleanup_sync_generic_outer_branch_stops_loop():
+    loop = MagicMock()
+    loop.is_closed.return_value = False
+    loop.is_running.side_effect = [RuntimeError("state failed"), True]
+    proxy = MagicMock()
+    loop_thread = MagicMock()
+
+    PyContainers._cleanup_sync(proxy, loop, loop_thread, True)
+
+    loop.call_soon_threadsafe.assert_called_once_with(loop.stop)
+    loop_thread.join.assert_called_once_with(timeout=1)
 
 
 def test_package_level_clients_exist():

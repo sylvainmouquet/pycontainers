@@ -4,11 +4,19 @@ from pycontainers.shared.utilities import (
     extract_run_container_id,
     get_exit_code,
     parse_container_ps_json,
+    run_coro_in_thread,
 )
 
 
 def test_build_command_line_simple():
     assert _build_command_line("ps") == ["ps", "--format=json", "--no-trunc"]
+
+
+def test_run_coro_in_thread():
+    async def value():
+        return "ok"
+
+    assert run_coro_in_thread(value()) == "ok"
 
 
 def test_build_command_line_with_filter():
@@ -65,12 +73,6 @@ def test_build_command_line_with_command():
 
 
 def test_build_command_line_with_image():
-    args = ()
-    kwargs = {
-        "image": "busybox",
-    }
-    assert _build_command_line("run", *args, **kwargs) == ["run", "busybox"]
-
     assert _build_command_line("run", image="busybox") == ["run", "busybox"]
 
 
