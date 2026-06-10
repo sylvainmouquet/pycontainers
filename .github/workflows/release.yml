@@ -17,7 +17,7 @@ jobs:
           fetch-depth: 10
       - uses: ./.github/actions/setup
         with:
-          python-version: "3.13"
+          python-version: "3.14"
           version: ${{ github.ref_name }}
       - name: Install Podman
         run: |
@@ -32,7 +32,7 @@ jobs:
           just test-podman
         shell: bash
         env:
-          PYTHON_VERSION: "3.13"
+          PYTHON_VERSION: "3.14"
       - name: mint API token
         id: mint-token
         run: |

@@ -5,7 +5,7 @@ inputs:
   python-version:
     description: Python version to use
     required: false
-    default: "3.13"
+    default: "3.14"
   version:
     description: Package version used for the build step
     required: false

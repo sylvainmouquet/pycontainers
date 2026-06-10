@@ -236,8 +236,29 @@ async def test_dispatch_command_run(docker_client):
         new=AsyncMock(return_value=Container(parent=docker_client, ID="container-id")),
     ) as build_container:
         container = await docker_client._dispatch_command("run", "alpine")
-    build_container.assert_awaited_once()
+    build_container.assert_awaited_once_with("container-id", None)
     assert container.ID == "container-id"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_command_run_podman_pull_output(docker_client):
+    run_output = (
+        'Resolved "alpine" as an alias\r\n'
+        "Writing manifest to image destination\r\n"
+        "abc123containerid\r\n[exit 0]\n"
+    )
+    with patch.object(
+        docker_client,
+        "_execute_request",
+        new=AsyncMock(return_value=(run_output, 200)),
+    ), patch.object(
+        docker_client,
+        "_build_run_container",
+        new=AsyncMock(return_value=Container(parent=docker_client, ID="abc123containerid")),
+    ) as build_container:
+        container = await docker_client._dispatch_command("run", "alpine")
+    build_container.assert_awaited_once_with("abc123containerid", None)
+    assert container.ID == "abc123containerid"
 
 
 @pytest.mark.asyncio
@@ -251,6 +272,23 @@ async def test_dispatch_command_ps_docker(docker_client, monkeypatch):
         docker_client,
         "_execute_request",
         new=AsyncMock(return_value=(f"{row}\n[exit 0]\n", 200)),
+    ):
+        containers = await docker_client._dispatch_command("ps")
+    assert len(containers) == 1
+    assert containers[0].ID == "abc"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_command_ps_podman_array(docker_client, monkeypatch):
+    monkeypatch.setattr(
+        "pycontainers.shared.runtime.client.uses_macos_container_cli",
+        lambda _backend: False,
+    )
+    payload = json.dumps([{"ID": "abc", "Names": "demo"}])
+    with patch.object(
+        docker_client,
+        "_execute_request",
+        new=AsyncMock(return_value=(f"{payload}\n[exit 0]\n", 200)),
     ):
         containers = await docker_client._dispatch_command("ps")
     assert len(containers) == 1

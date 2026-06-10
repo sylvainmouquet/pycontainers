@@ -1,7 +1,9 @@
 from pycontainers.shared.utilities import (
     _build_command_line,
     clean_result,
+    extract_run_container_id,
     get_exit_code,
+    parse_container_ps_json,
 )
 
 
@@ -107,6 +109,46 @@ def test_clean_result():
     assert clean_result("[exit 1]") == ""
     assert clean_result("some output\n[exit 2]\n") == "some output\n"
     assert clean_result("no exit line here") == "no exit line here"
+
+
+def test_parse_container_ps_json_docker_ndjson():
+    row_one = '{"ID":"abc","Names":"demo"}'
+    row_two = '{"ID":"def","Names":"other"}'
+    rows = parse_container_ps_json(f"{row_one}\n{row_two}\n")
+    assert rows == [{"ID": "abc", "Names": "demo"}, {"ID": "def", "Names": "other"}]
+
+
+def test_parse_container_ps_json_podman_array():
+    payload = '[{"ID":"abc","Names":"demo"},{"ID":"def","Names":"other"}]'
+    rows = parse_container_ps_json(payload)
+    assert rows == [{"ID": "abc", "Names": "demo"}, {"ID": "def", "Names": "other"}]
+
+
+def test_parse_container_ps_json_podman_array_with_crlf():
+    payload = '[{"ID":"abc","Names":"demo"}]\r\n'
+    rows = parse_container_ps_json(payload)
+    assert rows == [{"ID": "abc", "Names": "demo"}]
+
+
+def test_parse_container_ps_json_empty():
+    assert parse_container_ps_json("") == []
+
+
+def test_extract_run_container_id_simple():
+    assert extract_run_container_id("abc123\n") == "abc123"
+
+
+def test_extract_run_container_id_podman_pull_output():
+    output = (
+        'Resolved "alpine" as an alias (/etc/containers/registries.conf.d/shortnames.conf)\r\n'
+        "Trying to pull docker.io/library/alpine:latest...\r\n"
+        "Writing manifest to image destination\r\n"
+        "2c501d5004d3d59304930ec25537b948e3a8ec73926e9403d30f056b2593cc18"
+    )
+    assert (
+        extract_run_container_id(output)
+        == "2c501d5004d3d59304930ec25537b948e3a8ec73926e9403d30f056b2593cc18"
+    )
 
 
 def test_build_command_line_with_volumes():

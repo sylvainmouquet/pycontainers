@@ -10,7 +10,7 @@ wip:
 
 # Install dependencies
 install:
-    uv sync --python ${PYTHON_VERSION:-3.13} --all-extras --dev
+    uv sync --python ${PYTHON_VERSION:-3.14} --all-extras --dev
 
 # Build the project (requires VERSION env var)
 build: check-version
@@ -18,7 +18,7 @@ build: check-version
     ./scripts/version.sh "${VERSION}"
     @cat pyproject.toml | grep version
     @cat pycontainers/__init__.py | grep version
-    uv build --python ${PYTHON_VERSION:-3.13}
+    uv build --python ${PYTHON_VERSION:-3.14}
 
 [private]
 check-version:
@@ -45,9 +45,9 @@ install-local:
 test *args:
     #!/usr/bin/env bash
     if [ -z "{{args}}" ]; then
-        uv run --python ${PYTHON_VERSION:-3.13} pytest -v --log-cli-level=INFO
+        uv run --python ${PYTHON_VERSION:-3.14} pytest -v --log-cli-level=INFO
     else
-        uv run --python ${PYTHON_VERSION:-3.13} pytest -v --log-cli-level=INFO {{args}}
+        uv run --python ${PYTHON_VERSION:-3.14} pytest -v --log-cli-level=INFO {{args}}
     fi
 
 # Run unit tests with coverage collection and threshold enforcement
@@ -66,13 +66,13 @@ test-cov *args:
 
 # Run backend-specific integration tests
 test-docker:
-    uv run --python ${PYTHON_VERSION:-3.13} pytest -v tests/backends/docker/
+    uv run --python ${PYTHON_VERSION:-3.14} pytest -v tests/backends/docker/
 
 test-container:
-    uv run --python ${PYTHON_VERSION:-3.13} pytest -v tests/backends/container/
+    uv run --python ${PYTHON_VERSION:-3.14} pytest -v tests/backends/container/
 
 test-podman:
-    uv run --python ${PYTHON_VERSION:-3.13} pytest -v tests/backends/podman/
+    uv run --python ${PYTHON_VERSION:-3.14} pytest -v tests/backends/podman/
 
 # Run the formatter
 format:
@@ -85,7 +85,7 @@ lint: format
 
 # Run the Docker usage example (smoke test for local install)
 example-docker:
-    timeout 30 uv run --python ${PYTHON_VERSION:-3.13} python3 -m examples.docker.example_docker
+    timeout 30 uv run --python ${PYTHON_VERSION:-3.14} python3 -m examples.docker.example_docker
 
 # Update dependencies
 update:

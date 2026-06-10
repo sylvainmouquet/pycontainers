@@ -1,5 +1,7 @@
+import json
 import re
 import shlex
+from typing import Any
 
 
 def clean_result(text: str) -> str:
@@ -15,6 +17,48 @@ def get_exit_code(text: str) -> int:
         exit_code = int(match.group(1))
         return exit_code
     return -1
+
+
+def _normalize_cli_output(text: str) -> str:
+    return text.replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
+def parse_container_ps_json(result: str) -> list[dict[str, Any]]:
+    """Parse ``ps --format=json`` output from Docker or Podman."""
+    normalized = _normalize_cli_output(result)
+    if not normalized:
+        return []
+
+    # Podman emits a JSON array; Docker emits one JSON object per line.
+    try:
+        parsed = json.loads(normalized)
+    except json.JSONDecodeError:
+        parsed = None
+
+    if isinstance(parsed, list):
+        return [row for row in parsed if isinstance(row, dict)]
+    if isinstance(parsed, dict):
+        return [parsed]
+
+    rows: list[dict[str, Any]] = []
+    for line in normalized.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        row = json.loads(line)
+        if isinstance(row, dict):
+            rows.append(row)
+    return rows
+
+
+def extract_run_container_id(result: str) -> str:
+    """Extract the container ID from ``run --detach`` CLI output."""
+    normalized = _normalize_cli_output(result)
+    if not normalized:
+        return normalized
+
+    lines = [line.strip() for line in normalized.split("\n") if line.strip()]
+    return lines[-1] if lines else normalized
 
 
 def _build_command_line(

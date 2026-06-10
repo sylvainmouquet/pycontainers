@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- Minimum supported Python version raised to 3.14
 - ProxyCraft dependency uses editable local path (`../proxycraft`) for development; CI clones the repository alongside the workspace when the checkout is missing
 
 ### Fixed

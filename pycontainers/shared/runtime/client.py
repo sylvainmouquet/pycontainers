@@ -38,7 +38,9 @@ from pycontainers.shared.runtime.types import (
 from pycontainers.shared.utilities import (
     _build_command_line,
     clean_result,
+    extract_run_container_id,
     get_exit_code,
+    parse_container_ps_json,
 )
 
 if TYPE_CHECKING:
@@ -362,7 +364,7 @@ class PyContainers:
         )
 
         if subcommand == "run":
-            container_id = result_cleaned.replace("\r\n\n", "")
+            container_id = extract_run_container_id(result_cleaned)
             return await self._build_run_container(container_id, kwargs.get("envs"))
 
         if subcommand == "ps":
@@ -370,9 +372,7 @@ class PyContainers:
             if uses_macos_container_cli(self._backend):
                 rows = parse_macos_container_list(result_cleaned)
             else:
-                rows = [
-                    json.loads(row) for row in result_cleaned.split("\n") if row != ""
-                ]
+                rows = parse_container_ps_json(result_cleaned)
             return [Container(parent=self, **row_json) for row_json in rows]
 
         return result_cleaned.replace("\r\n\n", "")
