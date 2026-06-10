@@ -5,14 +5,13 @@ import sys
 import time
 import weakref
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 import nest_asyncio
 from proxycraft import ProxyCraft
 from proxycraft.features.configuration.models import Config
 
-from pycontainers.features.compose.client import _ComposeAccessor
 from pycontainers.shared.runtime.macos_commands import (
     adapt_command_line_for_macos,
     parse_macos_container_list,
@@ -41,6 +40,9 @@ from pycontainers.shared.utilities import (
     clean_result,
     get_exit_code,
 )
+
+if TYPE_CHECKING:
+    from pycontainers.features.compose.client import _ComposeAccessor
 
 nest_asyncio.apply()
 
@@ -553,8 +555,10 @@ class PyContainers:
         return _AsyncCommandAccessor(self)
 
     @property
-    def compose(self) -> _ComposeAccessor:
+    def compose(self) -> "_ComposeAccessor":
         """Compose project lifecycle helpers and service-level accessors."""
+        from pycontainers.features.compose.client import _ComposeAccessor
+
         return _ComposeAccessor(self)
 
     def __getattr__(self, subcommand: str):
