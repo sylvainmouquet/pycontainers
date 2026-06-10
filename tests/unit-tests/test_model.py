@@ -2,6 +2,11 @@ from pycontainers import PyContainers
 from pycontainers.features.docker import Container
 
 
+def _client() -> PyContainers:
+    """Unit-test client that does not require a runtime on PATH."""
+    return PyContainers(backend="docker")
+
+
 def test_model():
     user_data = {
         "id": 1,
@@ -10,14 +15,14 @@ def test_model():
         "profile": {"age": 30, "city": "NYC"},
     }
 
-    container = Container(parent=PyContainers(), **user_data)
+    container = Container(parent=_client(), **user_data)
     assert container.id == 1
     assert container.name == "Alice"
 
 
 def test_model_config_env_is_dict():
     container = Container(
-        parent=PyContainers(),
+        parent=_client(),
         config={"env": ["var1=one", "var2=two", "empty"]},
     )
 
