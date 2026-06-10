@@ -1,0 +1,66 @@
+[project]
+name = "pycontainers"
+version = "1.19.0"
+description = "Python wrapper for docker/container/podman cli"
+authors = [{name = "Sylvain Mouquet", email = "sylvain.mouquet@gmail.com"}]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "asgi-lifespan>=2.1.0",
+    "proxycraft",
+    "nest-asyncio>=1.6.0"
+]
+
+license = { text = "MIT" }
+url = "https://github.com/sylvainmouquet/pycontainer"
+keywords = [
+    "docker",
+    "python",
+    "wrapper",
+    "podman",
+    "container"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Framework :: Pytest",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
+
+[project.urls]
+homepage = "https://github.com/sylvainmouquer/pycontainers"
+documentation = "https://github.com/sylvainmouquer/pycontainers"
+repository = "https://github.com/sylvainmouquer/pycontainers"
+changelog = "https://github.com/sylvainmouquer/pycontainers/releases"
+
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "certifi>=2026.1.4",
+    "httpx>=0.28.1",
+    "pip>=24.2",
+    "pytest-asyncio>=0.24.0",
+    "pytest-mock>=3.14.0",
+    "pytest>=8.3.3",
+    "ruff>=0.6.7",
+    "dotenv>=0.9.9",
+]
+
+[tool.uv.sources]
+pycontainers = { path = "pycontainers" }
+# proxycraft = { path = "../proxycraft" }
+
+[project.entry-points.pytest11]
+pycontainers = "pycontainers"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
