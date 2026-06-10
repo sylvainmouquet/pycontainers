@@ -1,6 +1,11 @@
 DOCKER_ENDPOINT = {
     "backends": {
-        "command": {"darwin": "container", "default": "docker", "id": "docker"}
+        "command": {
+            "darwin": "container",
+            "linux": "docker",
+            "default": "docker",
+            "id": "docker",
+        }
     },
     "identifier": "/docker",
     "match": "/docker/**",

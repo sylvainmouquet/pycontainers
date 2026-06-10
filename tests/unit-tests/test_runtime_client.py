@@ -18,7 +18,11 @@ from pycontainers.shared.runtime.container import Container, ContainerEnv
 def test_configuration_for_backend_non_darwin(monkeypatch):
     monkeypatch.setattr(sys, "platform", "linux")
     config = _configuration_for_backend("docker")
-    assert config["endpoints"][0]["backends"]["command"]["darwin"] == "container"
+    docker_endpoint = next(
+        endpoint for endpoint in config["endpoints"] if endpoint["identifier"] == "/docker"
+    )
+    assert docker_endpoint["backends"]["command"]["darwin"] == "container"
+    assert docker_endpoint["backends"]["command"]["linux"] == "docker"
 
 
 def test_configuration_for_backend_darwin_container(monkeypatch):

@@ -12,6 +12,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- Docker backend on Linux: set explicit `linux` command in ProxyCraft config so proxycraft does not resolve a `None` platform override instead of `default`
+
 ### Removed
 
 ## [2.0.0] - 2026-06-10

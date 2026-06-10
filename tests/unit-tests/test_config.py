@@ -5,6 +5,7 @@ from pycontainers.shared.runtime.config import CONFIGURATION, DOCKER_COMPOSE_END
 def test_docker_endpoint_uses_container_on_darwin():
     command_backend = DOCKER_ENDPOINT["backends"]["command"]
     assert command_backend["darwin"] == "container"
+    assert command_backend["linux"] == "docker"
     assert command_backend["default"] == "docker"
 
 
