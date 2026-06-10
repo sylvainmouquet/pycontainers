@@ -240,7 +240,7 @@ Application (sync or asyncio)
 
 - **ProxyCraft** — proxies HTTP requests to local CLI processes
 - **httpx** — ASGI transport for in-process ProxyCraft calls
-- **nest-asyncio** — allows nested event loops when invoked from async contexts
+- Sync runtime dispatch uses a dedicated background asyncio event loop so sync APIs work from pytest-asyncio and other async contexts on Python 3.14
 
 **Design decisions**
 

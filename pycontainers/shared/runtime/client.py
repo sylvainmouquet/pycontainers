@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 import copy
 import json
 import sys
@@ -723,6 +724,11 @@ class PyContainers:
             loop.run_until_complete(proxy.shutdown_event())
             if not loop.is_running():
                 loop.close()
+        except concurrent.futures.TimeoutError:
+            logger.debug("Runtime client cleanup timed out", exc_info=True)
+            if owns_background_loop and loop_thread is not None and loop.is_running():
+                loop.call_soon_threadsafe(loop.stop)
+                loop_thread.join(timeout=1)
         except Exception:
             logger.warning("Runtime client cleanup failed", exc_info=True)
             if owns_background_loop and loop_thread is not None and loop.is_running():

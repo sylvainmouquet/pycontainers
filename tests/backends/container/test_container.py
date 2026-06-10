@@ -18,10 +18,10 @@ if not is_macos_container_available():
         allow_module_level=True,
     )
 
-from pycontainers import CommandError, docker
+from pycontainers import CommandError, docker  # noqa: E402
 
 
-def _containers_named(containers: list, name: uuid.UUID) -> list:
+def _containers_named(containers: list, name: str) -> list:
     name_str = str(name)
     return [
         container
@@ -51,7 +51,7 @@ def test_container_ps_all():
 
 @pytest.mark.asyncio
 async def test_container_run_and_cleanup():
-    name = uuid.uuid4()
+    name = str(uuid.uuid4())
     container = docker.run(
         "alpine",
         name=name,

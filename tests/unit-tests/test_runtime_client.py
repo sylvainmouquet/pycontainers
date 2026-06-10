@@ -1,7 +1,7 @@
 import asyncio
+import concurrent.futures
 import json
 import sys
-from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -524,6 +524,18 @@ def test_cleanup_sync_success():
     proxy.shutdown_event = AsyncMock(return_value=None)
     PyContainers._cleanup_sync(proxy, loop, None, False)
     assert loop.is_closed()
+
+
+def test_cleanup_sync_timeout_does_not_warn(capsys):
+    loop = asyncio.new_event_loop()
+    proxy = MagicMock()
+    proxy.shutdown_event = AsyncMock(side_effect=concurrent.futures.TimeoutError())
+
+    PyContainers._cleanup_sync(proxy, loop, None, False)
+
+    captured = capsys.readouterr().out
+    assert "Runtime client cleanup failed" not in captured
+    loop.close()
 
 
 def test_package_level_clients_exist():
