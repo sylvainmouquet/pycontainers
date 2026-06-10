@@ -73,6 +73,35 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+### Streaming Output
+
+Long-running or verbose commands can stream stdout/stderr instead of buffering the full response:
+
+```python
+import asyncio
+
+from pycontainers import docker
+
+
+async def main():
+    async for chunk in docker.aio.stream("pull", "ubuntu:20.04"):
+        print(chunk, end="")
+
+    container = await docker.aio.run("alpine", detach=True, command=["echo", "hello"])
+    async for line in container.aio.stream_lines("logs"):
+        print(line)
+
+    # Follow logs until the stream ends (Ctrl+C in scripts)
+    async for line in container.aio.follow_logs(tail=10):
+        print(line)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Sync callers can use `docker.stream(...)`, `container.stream_lines(...)`, or `container.logs(follow=True)`.
+
 Synchronous callers can keep using `docker.ps()`, `docker.run()`, and `container.execute()` as before. These commands expose typed kwargs for common options (`name`, `detach`, `envs`, `volumes`, `filter`, and more).
 
 Failed CLI commands raise `CommandError` with `subcommand`, `exit_code`, and `output` attributes:
@@ -109,6 +138,7 @@ project.down(volumes=True)
 
 - [Product specification](SPECS.md)
 - [Architecture](docs/architecture.md)
+- [Development guide](docs/development.md)
 
 ## Development
 
@@ -118,15 +148,17 @@ This project uses [Just](https://github.com/casey/just) as its task runner. Inst
 just --list                              # List available commands
 just install                             # Install dependencies
 just test                                # Run all tests
+just test-cov                            # Run unit tests with coverage enforcement
 just test-docker                         # Docker CLI integration tests (CI job: docker)
 just test-container                      # Apple container CLI tests (CI job: container, macOS)
 just test-podman                         # Podman CLI integration tests (CI job: podman)
 just test tests/unit-tests/test_model.py  # Run specific tests
-just lint                                # Run linter and formatter
+just lint                                # Run linter and verify formatting
+just format                              # Apply code formatting
 just check                               # Run pyright type checker
 just update                              # Update dependencies
 just check-deps                          # Check for outdated dependencies
-VERSION=1.0.0 just build                 # Build the package (VERSION is required)
+VERSION=2.0.0 just build                 # Build the package (VERSION is required)
 just install-local                       # Install the local wheel build
 just deploy                              # Deploy to PyPI
 ```

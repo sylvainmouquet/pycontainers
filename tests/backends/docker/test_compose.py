@@ -23,6 +23,7 @@ def test_compose_client_builds_project_options():
         project_directory="/tmp/demo",
         env_file=".env",
         profiles=["debug"],
+        invocation="plugin",
     )
     parts = client._project_option_parts()
     assert parts == [
@@ -40,16 +41,33 @@ def test_compose_client_builds_project_options():
 
 
 def test_compose_client_builds_command():
-    client = ComposeClient(docker, file="stack.yml", project_name="stack")
+    client = ComposeClient(
+        docker, file="stack.yml", project_name="stack", invocation="plugin"
+    )
     command = client._build_compose_command("up", detach=True, build=True)
     assert command[:6] == ["compose", "-f", "stack.yml", "-p", "stack", "up"]
     assert set(command[6:]) == {"--detach", "--build"}
 
 
+def test_compose_client_builds_standalone_command():
+    client = ComposeClient(
+        docker, file="stack.yml", project_name="stack", invocation="standalone"
+    )
+    command = client._build_compose_command("up", detach=True, build=True)
+    assert command[:5] == ["-f", "stack.yml", "-p", "stack", "up"]
+    assert set(command[5:]) == {"--detach", "--build"}
+
+
 def test_compose_client_ps_adds_json_format():
-    client = ComposeClient(docker)
+    client = ComposeClient(docker, invocation="plugin")
     command = client._build_compose_command("ps")
     assert command == ["compose", "ps", "--format", "json"]
+
+
+def test_compose_client_ps_adds_json_format_for_standalone():
+    client = ComposeClient(docker, invocation="standalone")
+    command = client._build_compose_command("ps")
+    assert command == ["ps", "--format", "json"]
 
 
 def test_compose_accessor_callable():
@@ -65,7 +83,7 @@ def test_compose_service_repr():
 
 
 def test_compose_down_volumes_flag():
-    client = ComposeClient(docker)
+    client = ComposeClient(docker, invocation="plugin")
     command = client._build_compose_command("down", volumes=True, remove_orphans=True)
     assert command == [
         "compose",

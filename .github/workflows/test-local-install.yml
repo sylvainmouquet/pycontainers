@@ -30,9 +30,12 @@ jobs:
       - name: Use uv with Python version
         run: uv venv --python 3.13
 
+      - uses: ./.github/actions/checkout-proxycraft
+
       - name: Install dependencies
         run: just install
 
-      - name: Run
-        run: |
-          timeout 30 uv run python3 -m examples.docker.example_docker
+      - name: Run Docker example
+        run: just example-docker
+        env:
+          PYTHON_VERSION: "3.13"

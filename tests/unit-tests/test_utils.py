@@ -187,3 +187,212 @@ def test_build_command_line_with_cap_add():
         "--cap-add=SECOND",
         "busybox",
     ]
+
+
+def test_build_command_line_positional_dict_mixed_value_types():
+    assert _build_command_line("ps", {"all": True, "quiet": "true"}) == [
+        "ps",
+        "--format=json",
+        "--no-trunc",
+        "--all",
+        "--quiet",
+        "true",
+    ]
+
+
+def test_build_command_line_multiple_scalar_kwargs():
+    assert _build_command_line("pull", "alpine", quiet=False, format="json") == [
+        "pull",
+        "--format",
+        "json",
+        "alpine",
+    ]
+
+
+def test_build_command_line_positional_dict_multiple_keys():
+    assert _build_command_line("ps", {"all": True, "name": "web"}) == [
+        "ps",
+        "--format=json",
+        "--no-trunc",
+        "--all",
+        "--name",
+        "web",
+    ]
+
+
+def test_build_command_line_skips_volume_without_container_path():
+    assert _build_command_line(
+        "run",
+        image="busybox",
+        volumes={"/skip": {"mode": "rw"}},
+    ) == ["run", "busybox"]
+
+
+def test_build_command_line_skips_false_generic_bool():
+    assert _build_command_line("pull", "alpine", quiet=False) == ["pull", "alpine"]
+
+
+def test_build_command_line_skips_false_positional_dict_values():
+    assert _build_command_line("ps", {"all": True, "quiet": False}) == [
+        "ps",
+        "--format=json",
+        "--no-trunc",
+        "--all",
+    ]
+
+
+def test_build_command_line_empty_option_dict_falls_back_to_scalar():
+    assert _build_command_line("pull", "alpine", labels={}) == [
+        "pull",
+        "--labels",
+        "{}",
+        "alpine",
+    ]
+
+
+def test_build_command_line_run_without_image():
+    assert _build_command_line("run", rm=True, command=["echo", "hi"]) == [
+        "run",
+        "--rm",
+        "echo",
+        "hi",
+    ]
+
+
+def test_build_command_line_volume_dict_without_mode_branch():
+    assert _build_command_line(
+        "run",
+        image="busybox",
+        volumes={"/host": {"bind": "/container"}},
+    ) == ["run", "-v", "/host:/container", "busybox"]
+    assert _build_command_line("version", format="json") == [
+        "version",
+        "--format",
+        "json",
+    ]
+
+
+def test_build_command_line_with_positional_dict_string_value():
+    assert _build_command_line("ps", {"quiet": "true"}) == [
+        "ps",
+        "--format=json",
+        "--no-trunc",
+        "--quiet",
+        "true",
+    ]
+
+
+def test_build_command_line_with_command_string():
+    assert _build_command_line("run", "busybox", command="echo hello") == [
+        "run",
+        "busybox",
+        "echo",
+        "hello",
+    ]
+
+
+def test_build_command_line_volume_dict_target_without_mode():
+    assert _build_command_line(
+        "run",
+        image="busybox",
+        volumes={"/host": {"target": "/container"}},
+    ) == ["run", "-v", "/host:/container", "busybox"]
+
+
+def test_build_command_line_volume_dict_scalar_mount():
+    assert _build_command_line(
+        "run",
+        image="busybox",
+        volumes={"/host": "/container"},
+    ) == ["run", "-v", "/host:/container", "busybox"]
+
+
+def test_build_command_line_generic_bool_option():
+    assert _build_command_line("network", "create", internal=True) == [
+        "network",
+        "--internal",
+        "create",
+    ]
+
+
+def test_build_command_line_non_ps_non_run_command():
+    assert _build_command_line("pull", "alpine", quiet=True) == [
+        "pull",
+        "--quiet",
+        "alpine",
+    ]
+    assert _build_command_line("ps", {"all": True, "quiet": False}) == [
+        "ps",
+        "--format=json",
+        "--no-trunc",
+        "--all",
+    ]
+
+
+def test_build_command_line_with_object_id_arg():
+    class FakeContainer:
+        ID = "container-123"
+
+    assert _build_command_line("rm", FakeContainer()) == ["rm", "container-123"]
+
+
+def test_build_command_line_with_command_list():
+    assert _build_command_line("run", "busybox", command=["echo", "hello"]) == [
+        "run",
+        "busybox",
+        "echo",
+        "hello",
+    ]
+
+
+def test_build_command_line_volume_dict_target_and_skip_invalid():
+    kwargs = {
+        "image": "busybox",
+        "volumes": {
+            "/host": {"target": "/container", "mode": "ro"},
+            "/skip": {"mode": "rw"},
+        },
+    }
+    assert _build_command_line("run", **kwargs) == [
+        "run",
+        "-v",
+        "/host:/container:ro",
+        "busybox",
+    ]
+
+
+def test_build_command_line_volume_tuple_with_mode_and_scalar():
+    kwargs = {
+        "image": "busybox",
+        "volumes": [
+            ("/a", "/b", "rw"),
+            "/mounted",
+        ],
+    }
+    assert _build_command_line("run", **kwargs) == [
+        "run",
+        "-v",
+        "/a:/b:rw",
+        "-v",
+        "/mounted",
+        "busybox",
+    ]
+
+
+def test_build_command_line_generic_dict_option():
+    assert _build_command_line("network", "create", labels={"env": "dev"}) == [
+        "network",
+        "--labels",
+        "env=dev",
+        "create",
+    ]
+
+
+def test_build_command_line_strips_quoted_shell_command():
+    assert _build_command_line(
+        "exec",
+        "container-id",
+        "sh",
+        "-c",
+        "'echo hello world'",
+    ) == ["exec", "container-id", "sh", "-c", "echo hello world"]

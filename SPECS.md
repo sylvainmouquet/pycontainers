@@ -172,28 +172,28 @@ Long-form docs, feature READMEs, and kept-up-to-date examples aligned with the f
 
 ### 12. CI coverage enforcement
 
-**Status:** Planned
+**Status:** Done
 
 Automated coverage collection and threshold enforcement in GitHub Actions, with results visible on pull requests.
 
-- [ ] pytest-cov integration in CI
-- [ ] Coverage summary in GitHub Actions
-- [ ] PR coverage comments or badge
+- [x] pytest-cov integration in CI
+- [x] Coverage summary in GitHub Actions
+- [x] PR coverage comments or badge
 
-**Potential files:** `.github/actions/test/action.yml`, `justfile`
+**Key files:** `.github/actions/test/action.yml`, `.github/workflows/test.yml`, `justfile`, `pyproject.toml`, `docs/decisions/0003-ci-coverage-policy.md`
 
 ---
 
 ### 13. Streaming command output
 
-**Status:** Planned (Long Term)
+**Status:** Done
 
 Stream stdout/stderr from long-running or verbose Docker commands instead of buffering full responses.
 
-- [ ] Stream mode in `_session_client`
-- [ ] Iterator-based API for log following
+- [x] Stream mode in `_session_client`
+- [x] Iterator-based API for log following
 
-**Potential files:** `pycontainers/features/docker/client.py`
+**Key files:** `pycontainers/shared/runtime/client.py`, `pycontainers/shared/runtime/container.py`, `pycontainers/shared/runtime/streaming.py`
 
 ---
 

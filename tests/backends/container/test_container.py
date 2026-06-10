@@ -21,8 +21,8 @@ def _containers_named(containers: list, name: uuid.UUID) -> list:
     return [
         container
         for container in containers
-        if name_str in str(container.get("Names", ""))
-        or name_str in str(container.get("ID", ""))
+        if name_str in str(getattr(container, "Names", ""))
+        or name_str in str(getattr(container, "ID", ""))
     ]
 
 

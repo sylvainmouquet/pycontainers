@@ -1,0 +1,12 @@
+name: Checkout proxycraft
+description: Clone proxycraft as a sibling checkout when ../proxycraft is missing
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout proxycraft
+      run: |
+        if [ ! -f "../proxycraft/pyproject.toml" ]; then
+          git clone --depth 1 https://github.com/sylvainmouquet/proxycraft.git ../proxycraft
+        fi
+      shell: bash

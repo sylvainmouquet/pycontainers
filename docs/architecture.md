@@ -43,6 +43,8 @@ GitHub Actions (`.github/workflows/test.yml`) runs four jobs:
 
 Shared setup steps live in `.github/actions/setup/`. The composite test action (`.github/actions/test/`) runs unit tests and type checking only; each backend has its own workflow job so results are visible separately in GitHub Actions.
 
+All CI jobs invoke recipes from the root `justfile` (see [Development guide](development.md)).
+
 ## Runtime selection
 
 Callers can choose a backend in three ways:
@@ -60,6 +62,17 @@ On macOS, the docker endpoint resolves at runtime: Colima, Docker Desktop, or an
 - **ProxyCraft** — proxies HTTP requests to local CLI processes
 - **httpx** — ASGI transport for in-process ProxyCraft calls
 - **nest-asyncio** — allows nested event loops when invoked from async contexts
+
+## Streaming output
+
+ProxyCraft streams CLI stdout/stderr as chunked HTTP responses. PyContainers exposes that stream through:
+
+- `docker.stream(subcommand, ...)` / `docker.aio.stream(...)` — chunk iterator
+- `docker.stream_lines(...)` / `docker.aio.stream_lines(...)` — line iterator
+- `container.follow_logs(...)` / `container.aio.follow_logs(...)` — `docker logs --follow`
+- `container.logs(follow=True)` — sync shorthand returning a line iterator
+
+Buffered dispatch (`docker.ps()`, `container.execute()`, etc.) is unchanged and still collects the full response before returning.
 
 ## Design decisions
 

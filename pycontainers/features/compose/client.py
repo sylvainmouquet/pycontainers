@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from typing import TYPE_CHECKING, Any
 
 from pycontainers.features.compose.service import ComposeService
@@ -12,7 +13,9 @@ from pycontainers.shared.utilities import (
 )
 
 if TYPE_CHECKING:
+    from pycontainers.features.compose.detection import ComposeInvocation
     from pycontainers.shared.runtime.client import PyContainers
+    from pycontainers.shared.runtime.detection import RuntimeBackend
 
 logger = get_logger(__name__)
 
@@ -59,6 +62,7 @@ class ComposeClient:
         project_directory: str | None = None,
         env_file: str | list[str] | tuple[str, ...] | None = None,
         profiles: str | list[str] | tuple[str, ...] | None = None,
+        invocation: "ComposeInvocation | None" = None,
     ) -> None:
         self.parent = parent
         self._file = file
@@ -66,10 +70,30 @@ class ComposeClient:
         self._project_directory = project_directory
         self._env_file = env_file
         self._profiles = profiles
+        self._invocation_override = invocation
 
     @property
-    def backend(self) -> str:
+    def backend(self) -> "RuntimeBackend":
         return self.parent.backend
+
+    @property
+    def invocation(self) -> "ComposeInvocation":
+        from pycontainers.features.compose.detection import resolve_compose_invocation
+
+        if self._invocation_override is not None:
+            return self._invocation_override
+        resolved = resolve_compose_invocation(self.backend)
+        if resolved is None:
+            raise RuntimeError(
+                f"Compose is unavailable for backend {self.backend!r}; "
+                f"install the compose plugin or {self.backend}-compose"
+            )
+        return resolved
+
+    def _compose_command_prefix(self) -> list[str]:
+        if self.invocation == "plugin":
+            return ["compose"]
+        return []
 
     def _project_option_parts(
         self,
@@ -149,6 +173,12 @@ class ComposeClient:
         if subcommand == "down" and normalized.pop("volumes", None) is True:
             extra_parts.append("--volumes")
 
+        if subcommand == "exec":
+            tty = normalized.pop("tty", None)
+            interactive = normalized.pop("interactive", None)
+            if tty is not True and interactive is not True:
+                extra_parts.append("-T")
+
         return normalized, extra_parts
 
     def _build_compose_command(
@@ -173,8 +203,13 @@ class ComposeClient:
             insert_at = 1 if command_parts else 0
             command_parts[insert_at:insert_at] = ["--format", "json"]
 
+        if subcommand == "exec" and extra_parts:
+            insert_at = 1 if command_parts else 0
+            command_parts[insert_at:insert_at] = extra_parts
+            extra_parts = []
+
         return [
-            "compose",
+            *self._compose_command_prefix(),
             *self._project_option_parts(**project_kwargs),
             *command_parts,
             *extra_parts,
@@ -193,6 +228,7 @@ class ComposeClient:
         return services
 
     async def _dispatch_command(self, subcommand: str, *args, **kwargs) -> Any:
+        start = time.perf_counter()
         project_kwargs, command_kwargs = self._extract_project_kwargs(kwargs)
         full_command_args = self._build_compose_command(
             subcommand,
@@ -200,14 +236,40 @@ class ComposeClient:
             project_kwargs=project_kwargs,
             **command_kwargs,
         )
+        from pycontainers.features.compose.detection import resolve_compose_endpoint
+
+        resolved_endpoint = resolve_compose_endpoint(self.backend, self.invocation)
+        logger.info(
+            "Dispatching compose command",
+            subcommand=subcommand,
+            backend=self.backend,
+            invocation=self.invocation,
+        )
         result, _ = await self.parent._execute_request(
-            full_command_args=full_command_args
+            full_command_args=full_command_args,
+            endpoint=resolved_endpoint,
         )
         exit_code = get_exit_code(result)
         result_cleaned = clean_result(result)
+        duration_ms = round((time.perf_counter() - start) * 1000)
 
         if exit_code > 0:
+            logger.error(
+                "Compose command failed",
+                subcommand=subcommand,
+                backend=self.backend,
+                exit_code=exit_code,
+                duration_ms=duration_ms,
+            )
             raise CommandError(f"compose {subcommand}", exit_code, result_cleaned)
+
+        logger.info(
+            "Compose command completed",
+            subcommand=subcommand,
+            backend=self.backend,
+            exit_code=exit_code,
+            duration_ms=duration_ms,
+        )
 
         if subcommand == "ps":
             return self._parse_services(result_cleaned)

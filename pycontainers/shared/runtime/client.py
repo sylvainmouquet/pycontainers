@@ -2,14 +2,15 @@ import asyncio
 import copy
 import json
 import sys
+import time
 import weakref
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from typing import Any
 
 import httpx
 import nest_asyncio
 from proxycraft import ProxyCraft
-from proxycraft.config.models import Config
+from proxycraft.features.configuration.models import Config
 
 from pycontainers.features.compose.client import _ComposeAccessor
 from pycontainers.shared.runtime.macos_commands import (
@@ -26,6 +27,7 @@ from pycontainers.shared.runtime.detection import (
     detect_runtime,
     resolve_docker_command_backend,
 )
+from pycontainers.shared.runtime.streaming import iter_lines, sync_iterator
 from pycontainers.shared.runtime.types import (
     PortPair,
     VolumeMapping,
@@ -129,6 +131,20 @@ class _AsyncCommandAccessor:
         pull_target = image if image is not None else ""
         return await self._client._dispatch_command("pull", pull_target, **kwargs)
 
+    def stream(self, subcommand: str, *args: Any, **kwargs: Any) -> AsyncIterator[str]:
+        """Stream stdout/stderr chunks for a runtime CLI subcommand."""
+        return self._client._dispatch_stream(subcommand, *args, **kwargs)
+
+    def stream_lines(
+        self, subcommand: str, *args: Any, **kwargs: Any
+    ) -> AsyncIterator[str]:
+        """Stream stdout/stderr as line-oriented output for a runtime CLI subcommand."""
+        return self._client._dispatch_stream_lines(subcommand, *args, **kwargs)
+
+    def follow_logs(self, *args: Any, **kwargs: Any) -> AsyncIterator[str]:
+        """Stream container logs with ``follow=True`` until the stream ends."""
+        return self.stream_lines("logs", *args, follow=True, **kwargs)
+
     def __getattr__(self, subcommand: str):
         if subcommand in _TYPED_COMMAND_ATTRS:
             raise AttributeError(
@@ -152,6 +168,9 @@ _NON_COMMAND_ATTRS = frozenset(
         "transport",
         "loop",
         "startup_task",
+        "stream",
+        "stream_lines",
+        "follow_logs",
         "_initialized",
         "_backend",
         "_endpoint",
@@ -178,13 +197,13 @@ class PyContainers:
         )
 
         self._initialized = False
+        logger.info("Initializing runtime client", backend=self._backend)
         try:
             self.loop = asyncio.get_running_loop()
             self.startup_task = asyncio.create_task(self.proxycraft.startup_event())
-
-            logger.debug("We're in an asyncio context")
+            logger.debug("Runtime client using existing asyncio event loop")
         except RuntimeError:
-            logger.debug("We're NOT in an asyncio context")
+            logger.debug("Runtime client creating new asyncio event loop")
             self.loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self.loop)
             self.loop.run_until_complete(self.proxycraft.startup_event())
@@ -196,7 +215,7 @@ class PyContainers:
     def backend(self) -> RuntimeBackend:
         return self._backend
 
-    async def _session_client(self, app, method, payload, stream):
+    async def _session_client(self, app, method, payload, stream, endpoint):
         transport = httpx.ASGITransport(app=app)
 
         async with httpx.AsyncClient(
@@ -204,7 +223,7 @@ class PyContainers:
         ) as client:
             if stream:
                 async with client.stream(
-                    url=self._endpoint,
+                    url=endpoint,
                     method=method,
                     json=payload,
                 ) as response:
@@ -212,7 +231,7 @@ class PyContainers:
                     yield response
             else:
                 response = await client.request(
-                    url=self._endpoint,
+                    url=endpoint,
                     method=method,
                     json=payload,
                 )
@@ -272,12 +291,22 @@ class PyContainers:
         try:
             env = await self._load_env_from_inspect(container.ID)
         except Exception:
+            logger.debug(
+                "Failed to load container env from inspect",
+                container_id=container_id,
+                exc_info=True,
+            )
             env = None
 
         if env is None:
             try:
                 env = await self._load_env_from_exec(container.ID)
             except Exception:
+                logger.debug(
+                    "Failed to load container env from exec",
+                    container_id=container_id,
+                    exc_info=True,
+                )
                 env = None
 
         if env is None and isinstance(runtime_envs, dict):
@@ -300,13 +329,35 @@ class PyContainers:
         return full_command_args
 
     async def _dispatch_command(self, subcommand: str, *args, **kwargs) -> Any:
+        start = time.perf_counter()
         full_command_args = self._prepare_command_args(subcommand, *args, **kwargs)
+        logger.info(
+            "Dispatching runtime command",
+            subcommand=subcommand,
+            backend=self._backend,
+        )
         result, _ = await self._execute_request(full_command_args=full_command_args)
         exit_code = get_exit_code(result)
         result_cleaned = clean_result(result)
+        duration_ms = round((time.perf_counter() - start) * 1000)
 
         if exit_code > 0:
+            logger.error(
+                "Runtime command failed",
+                subcommand=subcommand,
+                backend=self._backend,
+                exit_code=exit_code,
+                duration_ms=duration_ms,
+            )
             raise CommandError(subcommand, exit_code, clean_result(result))
+
+        logger.info(
+            "Runtime command completed",
+            subcommand=subcommand,
+            backend=self._backend,
+            exit_code=exit_code,
+            duration_ms=duration_ms,
+        )
 
         if subcommand == "run":
             container_id = result_cleaned.replace("\r\n\n", "")
@@ -323,6 +374,118 @@ class PyContainers:
             return [Container(parent=self, **row_json) for row_json in rows]
 
         return result_cleaned.replace("\r\n\n", "")
+
+    async def _iter_request(
+        self,
+        full_command_args: list[str],
+        *,
+        endpoint: str | None = None,
+    ) -> AsyncIterator[str]:
+        logger.debug(
+            "Streaming runtime command",
+            command_args=full_command_args,
+            endpoint=endpoint or self._endpoint,
+        )
+        async for response in self._session_client(
+            app=self.proxycraft.app,
+            method="GET",
+            stream=True,
+            payload={"args": full_command_args},
+            endpoint=endpoint or self._endpoint,
+        ):
+            async for chunk in response.aiter_text():
+                yield chunk
+
+    async def _stream_command(
+        self,
+        subcommand: str,
+        full_command_args: list[str],
+        *,
+        endpoint: str | None = None,
+    ) -> AsyncIterator[str]:
+        start = time.perf_counter()
+        logger.info(
+            "Starting runtime command stream",
+            subcommand=subcommand,
+            backend=self._backend,
+        )
+        accumulated = ""
+        try:
+            async for chunk in self._iter_request(
+                full_command_args, endpoint=endpoint
+            ):
+                accumulated += chunk
+                yield chunk
+        except Exception:
+            duration_ms = round((time.perf_counter() - start) * 1000)
+            logger.exception(
+                "Runtime command stream failed",
+                subcommand=subcommand,
+                backend=self._backend,
+                duration_ms=duration_ms,
+            )
+            raise
+
+        exit_code = get_exit_code(accumulated)
+        duration_ms = round((time.perf_counter() - start) * 1000)
+        if exit_code > 0:
+            logger.error(
+                "Runtime command stream exited with error",
+                subcommand=subcommand,
+                backend=self._backend,
+                exit_code=exit_code,
+                duration_ms=duration_ms,
+            )
+            raise CommandError(subcommand, exit_code, clean_result(accumulated))
+
+        logger.info(
+            "Runtime command stream completed",
+            subcommand=subcommand,
+            backend=self._backend,
+            exit_code=exit_code,
+            duration_ms=duration_ms,
+        )
+
+    async def _dispatch_stream(
+        self, subcommand: str, *args: Any, **kwargs: Any
+    ) -> AsyncIterator[str]:
+        full_command_args = self._prepare_command_args(subcommand, *args, **kwargs)
+        async for chunk in self._stream_command(subcommand, full_command_args):
+            yield chunk
+
+    async def _dispatch_stream_lines(
+        self, subcommand: str, *args: Any, **kwargs: Any
+    ) -> AsyncIterator[str]:
+        async for line in iter_lines(
+            self._dispatch_stream(subcommand, *args, **kwargs)
+        ):
+            yield line
+
+    def _sync_stream(
+        self, subcommand: str, *args: Any, **kwargs: Any
+    ) -> Iterator[str]:
+        return sync_iterator(self.loop, self._dispatch_stream(subcommand, *args, **kwargs))
+
+    def _sync_stream_lines(
+        self, subcommand: str, *args: Any, **kwargs: Any
+    ) -> Iterator[str]:
+        return sync_iterator(
+            self.loop, self._dispatch_stream_lines(subcommand, *args, **kwargs)
+        )
+
+    def stream(self, subcommand: str, *args: Any, **kwargs: Any) -> Iterator[str]:
+        """Stream stdout/stderr chunks for a runtime CLI subcommand."""
+        return self._sync_stream(subcommand, *args, **kwargs)
+
+    def stream_lines(
+        self, subcommand: str, *args: Any, **kwargs: Any
+    ) -> Iterator[str]:
+        """Stream stdout/stderr as line-oriented output for a runtime CLI subcommand."""
+        return self._sync_stream_lines(subcommand, *args, **kwargs)
+
+    def follow_logs(self, *args: Any, **kwargs: Any) -> Iterator[str]:
+        """Stream container logs with ``follow=True`` until the stream ends."""
+        return self.stream_lines("logs", *args, follow=True, **kwargs)
 
     def run(
         self,
@@ -402,24 +565,56 @@ class PyContainers:
             )
 
         def command_wrapper(*args, **kwargs):
+            if subcommand == "logs" and kwargs.get("follow"):
+                return self._sync_stream_lines("logs", *args, **kwargs)
             return asyncio.run(self._dispatch_command(subcommand, *args, **kwargs))
 
         return command_wrapper
 
-    async def _execute_request(self, full_command_args: list[str]) -> Any:
-        logger.debug(f"command args : {full_command_args}")
-        async for response in self._session_client(
-            app=self.proxycraft.app,
-            method="GET",
-            stream=False,
-            payload={"args": full_command_args},
-        ):
-            return response.text, response.status_code
+    async def _execute_request(
+        self,
+        full_command_args: list[str],
+        *,
+        endpoint: str | None = None,
+    ) -> Any:
+        start = time.perf_counter()
+        resolved_endpoint = endpoint or self._endpoint
+        logger.debug(
+            "Executing runtime request",
+            command_args=full_command_args,
+            endpoint=resolved_endpoint,
+        )
+        try:
+            async for response in self._session_client(
+                app=self.proxycraft.app,
+                method="GET",
+                stream=False,
+                payload={"args": full_command_args},
+                endpoint=resolved_endpoint,
+            ):
+                duration_ms = round((time.perf_counter() - start) * 1000)
+                logger.debug(
+                    "Runtime request completed",
+                    endpoint=resolved_endpoint,
+                    status_code=response.status_code,
+                    duration_ms=duration_ms,
+                )
+                return response.text, response.status_code
+        except Exception:
+            duration_ms = round((time.perf_counter() - start) * 1000)
+            logger.exception(
+                "Runtime request failed",
+                endpoint=resolved_endpoint,
+                duration_ms=duration_ms,
+            )
+            raise
         return None
 
     async def close(self):
         """Async cleanup method"""
+        logger.info("Closing runtime client", backend=self._backend)
         await self.proxycraft.shutdown_event()
+        logger.info("Runtime client closed", backend=self._backend)
 
     def __del__(self):
         """Synchronous cleanup - calls async close() properly"""
@@ -438,7 +633,10 @@ class PyContainers:
                 try:
                     asyncio.run(self.close())
                 except Exception:
-                    ...
+                    logger.exception(
+                        "Runtime client cleanup failed during deletion",
+                        backend=getattr(self, "_backend", None),
+                    )
 
     @staticmethod
     def _cleanup_sync(proxy: Any, loop: asyncio.AbstractEventLoop):
@@ -448,5 +646,5 @@ class PyContainers:
                 asyncio.set_event_loop(loop)
                 loop.run_until_complete(proxy.shutdown_event())
                 loop.close()
-            except Exception as e:
-                print(f"Warning: Cleanup failed: {e}")
+            except Exception:
+                logger.warning("Runtime client cleanup failed", exc_info=True)

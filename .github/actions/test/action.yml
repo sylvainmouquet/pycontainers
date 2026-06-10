@@ -1,5 +1,5 @@
 name: Run unit tests
-description: Run pyright checks and unit tests
+description: Run pyright checks and unit tests with coverage enforcement
 
 inputs:
   python-version:
@@ -16,8 +16,26 @@ runs:
     - name: Run pyright
       run: just check
       shell: bash
-    - name: Run unit tests
-      run: just test tests/unit-tests/
+    - name: Run unit tests with coverage
+      run: just test-cov
       shell: bash
       env:
         PYTHON_VERSION: ${{ inputs.python-version }}
+    - name: Coverage summary
+      if: always() && hashFiles('coverage.xml') != ''
+      uses: irongut/CodeCoverageSummary@v1.3.0
+      with:
+        filename: coverage.xml
+        format: markdown
+        output: file
+    - name: Add coverage to job summary
+      if: always() && hashFiles('code-coverage-results.md') != ''
+      run: cat code-coverage-results.md >> "$GITHUB_STEP_SUMMARY"
+      shell: bash
+    - name: Upload coverage report
+      if: always() && hashFiles('coverage.xml') != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage.xml
+        retention-days: 14

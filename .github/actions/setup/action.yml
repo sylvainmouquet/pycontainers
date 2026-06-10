@@ -25,6 +25,7 @@ runs:
     - name: Use uv with Python version
       run: uv venv --python ${{ inputs.python-version }}
       shell: bash
+    - uses: ./.github/actions/checkout-proxycraft
     - name: Install dependencies
       run: just install
       shell: bash

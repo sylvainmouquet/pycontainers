@@ -1,8 +1,11 @@
 import asyncio
+import time
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from pycontainers.shared.errors import CommandError
 from pycontainers.shared.logging import get_logger
+from pycontainers.shared.runtime.streaming import iter_lines, sync_iterator
 from pycontainers.shared.utilities import (
     _build_command_line,
     clean_result,
@@ -21,6 +24,20 @@ class _AsyncContainerCommandAccessor:
     async def execute(self, *args, **kwargs) -> str:
         return await self._container._dispatch_command("execute", *args, **kwargs)
 
+    def stream(self, subcommand: str, *args: Any, **kwargs: Any) -> AsyncIterator[str]:
+        """Stream stdout/stderr chunks for a container-scoped CLI subcommand."""
+        return self._container._dispatch_stream(subcommand, *args, **kwargs)
+
+    def stream_lines(
+        self, subcommand: str, *args: Any, **kwargs: Any
+    ) -> AsyncIterator[str]:
+        """Stream stdout/stderr as lines for a container-scoped CLI subcommand."""
+        return self._container._dispatch_stream_lines(subcommand, *args, **kwargs)
+
+    def follow_logs(self, *args: Any, **kwargs: Any) -> AsyncIterator[str]:
+        """Stream container logs with ``follow=True`` until the stream ends."""
+        return self.stream_lines("logs", *args, follow=True, **kwargs)
+
     def __getattr__(self, subcommand: str):
         async def command_wrapper(*args, **kwargs):
             return await self._container._dispatch_command(subcommand, *args, **kwargs)
@@ -37,7 +54,9 @@ class ContainerEnv(dict[str, str]):
 
 
 class Container:
-    _NON_COMMAND_ATTRS = frozenset({"aio", "parent", "_data"})
+    _NON_COMMAND_ATTRS = frozenset(
+        {"aio", "parent", "_data", "stream", "stream_lines", "follow_logs"}
+    )
     parent: Any
     config: "Container | None" = None
     _data: dict[str, Any] | None = None
@@ -108,6 +127,7 @@ class Container:
         return runtime_subcommand, command_args
 
     async def _dispatch_command(self, subcommand: str, *args, **kwargs) -> str:
+        start = time.perf_counter()
         runtime_subcommand, command_args = self._resolve_command_args(
             subcommand, args, kwargs
         )
@@ -117,17 +137,94 @@ class Container:
             *command_args,
             **kwargs,
         )
-
+        logger.info(
+            "Dispatching container command",
+            subcommand=runtime_subcommand,
+            container_id=self.ID,
+        )
         result, _ = await self.parent._execute_request(
             full_command_args=full_command_args
         )
         exit_code = get_exit_code(result)
         result_cleaned = clean_result(result)
+        duration_ms = round((time.perf_counter() - start) * 1000)
 
         if exit_code > 0:
+            logger.error(
+                "Container command failed",
+                subcommand=runtime_subcommand,
+                container_id=self.ID,
+                exit_code=exit_code,
+                duration_ms=duration_ms,
+            )
             raise CommandError(runtime_subcommand, exit_code, result_cleaned)
 
+        logger.info(
+            "Container command completed",
+            subcommand=runtime_subcommand,
+            container_id=self.ID,
+            exit_code=exit_code,
+            duration_ms=duration_ms,
+        )
         return result_cleaned
+
+    def _prepare_stream_command(
+        self, subcommand: str, *args: Any, **kwargs: Any
+    ) -> tuple[str, list[str]]:
+        runtime_subcommand, command_args = self._resolve_command_args(
+            subcommand, args, kwargs
+        )
+        full_command_args = _build_command_line(
+            runtime_subcommand,
+            self.ID,
+            *command_args,
+            **kwargs,
+        )
+        return runtime_subcommand, full_command_args
+
+    async def _dispatch_stream(
+        self, subcommand: str, *args: Any, **kwargs: Any
+    ) -> AsyncIterator[str]:
+        runtime_subcommand, full_command_args = self._prepare_stream_command(
+            subcommand, *args, **kwargs
+        )
+        async for chunk in self.parent._stream_command(
+            runtime_subcommand, full_command_args
+        ):
+            yield chunk
+
+    async def _dispatch_stream_lines(
+        self, subcommand: str, *args: Any, **kwargs: Any
+    ) -> AsyncIterator[str]:
+        async for line in iter_lines(self._dispatch_stream(subcommand, *args, **kwargs)):
+            yield line
+
+    def _sync_stream(self, subcommand: str, *args: Any, **kwargs: Any) -> Iterator[str]:
+        return sync_iterator(
+            self.parent.loop, self._dispatch_stream(subcommand, *args, **kwargs)
+        )
+
+    def _sync_stream_lines(
+        self, subcommand: str, *args: Any, **kwargs: Any
+    ) -> Iterator[str]:
+        return sync_iterator(
+            self.parent.loop,
+            self._dispatch_stream_lines(subcommand, *args, **kwargs),
+        )
+
+    def stream(self, subcommand: str, *args: Any, **kwargs: Any) -> Iterator[str]:
+        """Stream stdout/stderr chunks for a container-scoped CLI subcommand."""
+        return self._sync_stream(subcommand, *args, **kwargs)
+
+    def stream_lines(
+        self, subcommand: str, *args: Any, **kwargs: Any
+    ) -> Iterator[str]:
+        """Stream stdout/stderr as lines for a container-scoped CLI subcommand."""
+        return self._sync_stream_lines(subcommand, *args, **kwargs)
+
+    def follow_logs(self, *args: Any, **kwargs: Any) -> Iterator[str]:
+        """Stream container logs with ``follow=True`` until the stream ends."""
+        return self.stream_lines("logs", *args, follow=True, **kwargs)
 
     @property
     def aio(self) -> _AsyncContainerCommandAccessor:
@@ -144,6 +241,8 @@ class Container:
             )
 
         def command_wrapper(*args, **kwargs):
+            if subcommand == "logs" and kwargs.get("follow"):
+                return self._sync_stream_lines("logs", *args, **kwargs)
             return asyncio.run(self._dispatch_command(subcommand, *args, **kwargs))
 
         return command_wrapper

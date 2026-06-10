@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 from pycontainers import PyContainers
@@ -111,6 +113,24 @@ def test_resolve_docker_command_backend_falls_back_to_container_on_darwin(monkey
     assert resolve_docker_command_backend() == "container"
 
 
+def test_resolve_docker_command_backend_warns_on_macos_when_unavailable(
+    monkeypatch,
+):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(
+        "pycontainers.shared.runtime.detection.is_runtime_available",
+        lambda _backend: False,
+    )
+    monkeypatch.setattr(
+        "pycontainers.shared.runtime.macos_commands.is_macos_container_available",
+        lambda: False,
+    )
+
+    from pycontainers.shared.runtime.detection import resolve_docker_command_backend
+
+    assert resolve_docker_command_backend() is None
+
+
 def test_is_docker_available_uses_macos_container_on_darwin(monkeypatch):
     import sys
 
@@ -147,3 +167,19 @@ def test_is_docker_available_uses_docker_info_off_darwin(monkeypatch):
     from pycontainers.shared.runtime.detection import is_docker_available
 
     assert is_docker_available() is True
+
+
+def test_resolve_docker_command_backend_warns_when_unavailable_off_darwin(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr("sys.platform", "linux")
+    monkeypatch.setattr(
+        "pycontainers.shared.runtime.detection.is_runtime_available",
+        lambda _backend: False,
+    )
+
+    from pycontainers.shared.runtime.detection import resolve_docker_command_backend
+
+    assert resolve_docker_command_backend() is None
+    captured = capsys.readouterr().out
+    assert "Docker CLI is unavailable" in captured

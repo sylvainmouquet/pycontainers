@@ -50,6 +50,20 @@ test *args:
         uv run --python ${PYTHON_VERSION:-3.13} pytest -v --log-cli-level=INFO {{args}}
     fi
 
+# Run unit tests with coverage collection and threshold enforcement
+test-cov *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    COVERAGE_FAIL_UNDER="${COVERAGE_FAIL_UNDER:-100}"
+    if [ -z "{{args}}" ]; then
+        TEST_ARGS=(tests/unit-tests/)
+    else
+        TEST_ARGS=( {{args}} )
+    fi
+    uv run coverage run -m pytest -v --log-cli-level=INFO "${TEST_ARGS[@]}"
+    uv run coverage report --fail-under="${COVERAGE_FAIL_UNDER}"
+    uv run coverage xml -o coverage.xml
+
 # Run backend-specific integration tests
 test-docker:
     uv run --python ${PYTHON_VERSION:-3.13} pytest -v tests/backends/docker/
@@ -60,11 +74,18 @@ test-container:
 test-podman:
     uv run --python ${PYTHON_VERSION:-3.13} pytest -v tests/backends/podman/
 
-# Run linter and formatter
-lint:
-    uv run ruff check --fix
+# Run the formatter
+format:
     uv run ruff format
+
+# Run linter and verify formatting
+lint: format
+    uv run ruff check --fix
     uv run ruff format --check
+
+# Run the Docker usage example (smoke test for local install)
+example-docker:
+    timeout 30 uv run --python ${PYTHON_VERSION:-3.13} python3 -m examples.docker.example_docker
 
 # Update dependencies
 update:
