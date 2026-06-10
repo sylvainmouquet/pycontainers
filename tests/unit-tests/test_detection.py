@@ -73,3 +73,35 @@ def test_is_runtime_available(monkeypatch):
 
     assert is_runtime_available("docker") is True
     assert is_runtime_available("podman") is False
+
+
+def test_is_docker_available_uses_macos_container_on_darwin(monkeypatch):
+    monkeypatch.setattr("sys.platform", "darwin")
+    monkeypatch.setattr(
+        "pycontainers.shared.runtime.macos_commands.is_macos_container_available",
+        lambda: True,
+    )
+
+    from pycontainers.shared.runtime.detection import is_docker_available
+
+    assert is_docker_available() is True
+
+
+def test_is_docker_available_uses_docker_info_off_darwin(monkeypatch):
+    monkeypatch.setattr("sys.platform", "linux")
+    monkeypatch.setattr(
+        "pycontainers.shared.runtime.detection.shutil.which",
+        lambda name: "/usr/bin/docker" if name == "docker" else None,
+    )
+
+    class Result:
+        returncode = 0
+
+    monkeypatch.setattr(
+        "pycontainers.shared.runtime.detection.subprocess.run",
+        lambda *args, **kwargs: Result(),
+    )
+
+    from pycontainers.shared.runtime.detection import is_docker_available
+
+    assert is_docker_available() is True

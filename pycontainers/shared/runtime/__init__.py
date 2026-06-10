@@ -8,6 +8,7 @@ from pycontainers.shared.runtime.container import Container, ContainerEnv
 from pycontainers.shared.runtime.detection import (
     RuntimeBackend,
     detect_runtime,
+    is_docker_available,
     is_runtime_available,
 )
 
@@ -20,5 +21,6 @@ __all__ = [
     "PyContainers",
     "RuntimeBackend",
     "detect_runtime",
+    "is_docker_available",
     "is_runtime_available",
 ]

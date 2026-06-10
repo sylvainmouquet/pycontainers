@@ -4,6 +4,12 @@ import uuid
 import pytest
 
 from pycontainers import CommandError, docker
+from pycontainers.shared.runtime.detection import is_docker_available
+
+docker_integration = pytest.mark.skipif(
+    not is_docker_available(),
+    reason="docker CLI is unavailable or not connected",
+)
 
 
 @pytest.mark.asyncio
@@ -14,18 +20,21 @@ async def test_async_bad_command():
     assert exc_info.value.exit_code > 0
 
 
+@docker_integration
 @pytest.mark.asyncio
 async def test_async_docker_pull():
     result = await docker.aio.pull("ubuntu:20.04")
     assert isinstance(result, str)
 
 
+@docker_integration
 @pytest.mark.asyncio
 async def test_async_docker_ps():
     containers = await docker.aio.ps(all=False)
     assert isinstance(containers, list)
 
 
+@docker_integration
 @pytest.mark.asyncio
 async def test_async_docker_run_and_execute():
     name = uuid.uuid4()
@@ -49,6 +58,7 @@ async def test_async_docker_run_and_execute():
     assert len(containers) == 0
 
 
+@docker_integration
 @pytest.mark.asyncio
 async def test_async_docker_run_with_env():
     name = uuid.uuid4()

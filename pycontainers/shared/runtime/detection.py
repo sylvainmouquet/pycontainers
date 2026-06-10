@@ -1,5 +1,6 @@
 import shutil
 import subprocess
+import sys
 from typing import Literal
 
 RuntimeBackend = Literal["docker", "podman"]
@@ -26,3 +27,14 @@ def is_runtime_available(backend: RuntimeBackend) -> bool:
         check=False,
     )
     return result.returncode == 0
+
+
+def is_docker_available() -> bool:
+    """Return True when docker-backed integration tests can run on this host."""
+    if sys.platform == "darwin":
+        from pycontainers.shared.runtime.macos_commands import (
+            is_macos_container_available,
+        )
+
+        return is_macos_container_available()
+    return is_runtime_available("docker")
