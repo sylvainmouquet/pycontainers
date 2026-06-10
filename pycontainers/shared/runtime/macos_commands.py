@@ -21,7 +21,11 @@ MACOS_UNSUPPORTED_FLAGS = frozenset({"--no-trunc"})
 
 def uses_macos_container_cli(backend: str) -> bool:
     """Return True when the docker backend should invoke Apple's container CLI."""
-    return backend == "docker" and sys.platform == "darwin"
+    if backend != "docker":
+        return False
+    from pycontainers.shared.runtime.detection import resolve_docker_command_backend
+
+    return resolve_docker_command_backend() == "container"
 
 
 def adapt_command_line_for_macos(cmd_parts: list[str]) -> list[str]:

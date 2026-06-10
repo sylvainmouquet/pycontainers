@@ -3,12 +3,10 @@ import uuid
 import pytest
 
 from pycontainers import podman
-from pycontainers.shared.runtime.detection import is_runtime_available
 
-pytestmark = pytest.mark.skipif(
-    not is_runtime_available("podman"),
-    reason="podman CLI is unavailable or not connected",
-)
+from tests.backends.markers import requires_podman
+
+pytestmark = requires_podman
 
 
 @pytest.mark.asyncio

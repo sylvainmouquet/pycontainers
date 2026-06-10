@@ -50,6 +50,16 @@ test *args:
         uv run --python ${PYTHON_VERSION:-3.13} pytest -v --log-cli-level=INFO {{args}}
     fi
 
+# Run backend-specific integration tests
+test-docker:
+    uv run --python ${PYTHON_VERSION:-3.13} pytest -v tests/backends/docker/
+
+test-container:
+    uv run --python ${PYTHON_VERSION:-3.13} pytest -v tests/backends/container/
+
+test-podman:
+    uv run --python ${PYTHON_VERSION:-3.13} pytest -v tests/backends/podman/
+
 # Run linter and formatter
 lint:
     uv run ruff check --fix

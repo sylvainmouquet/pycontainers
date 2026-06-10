@@ -118,6 +118,9 @@ This project uses [Just](https://github.com/casey/just) as its task runner. Inst
 just --list                              # List available commands
 just install                             # Install dependencies
 just test                                # Run all tests
+just test-docker                         # Docker CLI integration tests (CI job: docker)
+just test-container                      # Apple container CLI tests (CI job: container, macOS)
+just test-podman                         # Podman CLI integration tests (CI job: podman)
 just test tests/unit-tests/test_model.py  # Run specific tests
 just lint                                # Run linter and formatter
 just check                               # Run pyright type checker

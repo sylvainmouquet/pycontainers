@@ -10,8 +10,25 @@ from pycontainers.shared.runtime.macos_commands import (
 
 def test_uses_macos_container_cli_on_darwin(monkeypatch):
     monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(
+        "pycontainers.shared.runtime.detection.is_runtime_available",
+        lambda _backend: False,
+    )
+    monkeypatch.setattr(
+        "pycontainers.shared.runtime.macos_commands.is_macos_container_available",
+        lambda: True,
+    )
     assert uses_macos_container_cli("docker") is True
     assert uses_macos_container_cli("podman") is False
+
+
+def test_uses_macos_container_cli_false_when_docker_available_on_darwin(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(
+        "pycontainers.shared.runtime.detection.is_runtime_available",
+        lambda backend: backend == "docker",
+    )
+    assert uses_macos_container_cli("docker") is False
 
 
 def test_uses_macos_container_cli_off_darwin(monkeypatch):

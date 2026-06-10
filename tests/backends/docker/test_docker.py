@@ -4,12 +4,10 @@ import uuid
 import pytest
 
 from pycontainers import CommandError, docker
-from pycontainers.shared.runtime.detection import is_docker_available
 
-docker_integration = pytest.mark.skipif(
-    not is_docker_available(),
-    reason="docker CLI is unavailable or not connected",
-)
+from tests.backends.markers import requires_docker
+
+pytestmark = requires_docker
 
 
 @pytest.mark.asyncio
@@ -20,19 +18,16 @@ async def test_bad_command():
     assert exc_info.value.exit_code > 0
 
 
-@docker_integration
 @pytest.mark.asyncio
 async def test_docker_pull():
     print(docker.pull("ubuntu:20.04"))
 
 
-@docker_integration
 @pytest.mark.asyncio
 async def test_docker_pull_kwargs():
     print(docker.pull(command="ubuntu:20.04"))
 
 
-@docker_integration
 @pytest.mark.asyncio
 async def test_docker_ps():
     containers = docker.ps(all=False)
@@ -40,7 +35,6 @@ async def test_docker_ps():
         print(container)
 
 
-@docker_integration
 @pytest.mark.asyncio
 async def test_docker_ps_filter():
     name = uuid.uuid4()
@@ -50,7 +44,6 @@ async def test_docker_ps_filter():
     assert docker.rm(name) == str(name)
 
 
-@docker_integration
 @pytest.mark.asyncio
 async def test_docker_run():
     name = uuid.uuid4()
@@ -66,7 +59,6 @@ async def test_docker_run():
     assert docker.rm(name) == str(name)
 
 
-@docker_integration
 @pytest.mark.asyncio
 async def test_docker_run_with_execute():
     name = uuid.uuid4()
@@ -90,7 +82,6 @@ async def test_docker_run_with_execute():
     assert len(containers) == 0
 
 
-@docker_integration
 @pytest.mark.asyncio
 async def test_docker_run_with_env_and_instance_config_env():
     name = uuid.uuid4()
@@ -114,7 +105,6 @@ async def test_docker_run_with_env_and_instance_config_env():
     container.rm()
 
 
-@docker_integration
 @pytest.mark.asyncio
 async def test_docker_run_and_kill():
     name = uuid.uuid4()
@@ -129,7 +119,6 @@ async def test_docker_run_and_kill():
     docker.rm(container)
 
 
-@docker_integration
 @pytest.mark.asyncio
 async def test_docker_run_with_volume():
     import os

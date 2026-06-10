@@ -1,5 +1,7 @@
 import asyncio
+import copy
 import json
+import sys
 import weakref
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -19,7 +21,11 @@ from pycontainers.shared.errors import CommandError, UnsupportedBackendError
 from pycontainers.shared.logging import get_logger
 from pycontainers.shared.runtime.config import CONFIGURATION
 from pycontainers.shared.runtime.container import Container, ContainerEnv
-from pycontainers.shared.runtime.detection import RuntimeBackend, detect_runtime
+from pycontainers.shared.runtime.detection import (
+    RuntimeBackend,
+    detect_runtime,
+    resolve_docker_command_backend,
+)
 from pycontainers.shared.runtime.types import (
     PortPair,
     VolumeMapping,
@@ -37,6 +43,24 @@ from pycontainers.shared.utilities import (
 nest_asyncio.apply()
 
 logger = get_logger(__name__)
+
+
+def _configuration_for_backend(backend: RuntimeBackend) -> dict[str, Any]:
+    """Build ProxyCraft config with the docker CLI resolved for this host."""
+    config = copy.deepcopy(CONFIGURATION)
+    if backend != "docker" or sys.platform != "darwin":
+        return config
+
+    command_backend = resolve_docker_command_backend()
+    if command_backend is None:
+        return config
+
+    for endpoint in config["endpoints"]:
+        if endpoint["identifier"] == "/docker":
+            endpoint["backends"]["command"]["darwin"] = command_backend
+            break
+
+    return config
 
 
 class _AsyncCommandAccessor:
@@ -149,7 +173,9 @@ class PyContainers:
 
         self._backend: RuntimeBackend = backend
         self._endpoint = f"/{backend}"
-        self.proxycraft: ProxyCraft = ProxyCraft(config=Config(**CONFIGURATION))
+        self.proxycraft: ProxyCraft = ProxyCraft(
+            config=Config(**_configuration_for_backend(self._backend))
+        )
 
         self._initialized = False
         try:

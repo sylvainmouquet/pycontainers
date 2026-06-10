@@ -75,8 +75,50 @@ def test_is_runtime_available(monkeypatch):
     assert is_runtime_available("podman") is False
 
 
+def test_resolve_docker_command_backend_prefers_docker_on_darwin(monkeypatch):
+    import sys
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(
+        "pycontainers.shared.runtime.detection.is_runtime_available",
+        lambda backend: backend == "docker",
+    )
+    monkeypatch.setattr(
+        "pycontainers.shared.runtime.macos_commands.is_macos_container_available",
+        lambda: False,
+    )
+
+    from pycontainers.shared.runtime.detection import resolve_docker_command_backend
+
+    assert resolve_docker_command_backend() == "docker"
+
+
+def test_resolve_docker_command_backend_falls_back_to_container_on_darwin(monkeypatch):
+    import sys
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(
+        "pycontainers.shared.runtime.detection.is_runtime_available",
+        lambda _backend: False,
+    )
+    monkeypatch.setattr(
+        "pycontainers.shared.runtime.macos_commands.is_macos_container_available",
+        lambda: True,
+    )
+
+    from pycontainers.shared.runtime.detection import resolve_docker_command_backend
+
+    assert resolve_docker_command_backend() == "container"
+
+
 def test_is_docker_available_uses_macos_container_on_darwin(monkeypatch):
-    monkeypatch.setattr("sys.platform", "darwin")
+    import sys
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(
+        "pycontainers.shared.runtime.detection.is_runtime_available",
+        lambda _backend: False,
+    )
     monkeypatch.setattr(
         "pycontainers.shared.runtime.macos_commands.is_macos_container_available",
         lambda: True,
