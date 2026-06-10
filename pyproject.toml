@@ -1,6 +1,6 @@
 [project]
-name = "pycontainer"
-version = "1.15.0"
+name = "pycontainers"
+version = "1.19.0"
 description = "Python wrapper for docker/container/podman cli"
 authors = [{name = "Sylvain Mouquet", email = "sylvain.mouquet@gmail.com"}]
 readme = "README.md"
@@ -28,14 +28,15 @@ classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries :: Python Modules"
 ]
 
 [project.urls]
-homepage = "https://github.com/sylvainmouquer/pycontainer"
-documentation = "https://github.com/sylvainmouquer/pycontainer"
-repository = "https://github.com/sylvainmouquer/pycontainer"
-changelog = "https://github.com/sylvainmouquer/pycontainer/releases"
+homepage = "https://github.com/sylvainmouquer/pycontainers"
+documentation = "https://github.com/sylvainmouquer/pycontainers"
+repository = "https://github.com/sylvainmouquer/pycontainers"
+changelog = "https://github.com/sylvainmouquer/pycontainers/releases"
 
 
 [build-system]
@@ -55,8 +56,11 @@ dev = [
 ]
 
 [tool.uv.sources]
-pycontainer = { path = "pycontainer" }
+pycontainers = { path = "pycontainers" }
 # proxycraft = { path = "../proxycraft" }
 
 [project.entry-points.pytest11]
-pycontainer = "pycontainer"
+pycontainers = "pycontainers"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

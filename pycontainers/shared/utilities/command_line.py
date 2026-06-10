@@ -8,10 +8,8 @@ def clean_result(text: str) -> str:
 
 def get_exit_code(text: str) -> int:
     """Return the exitcode in [exit XXX]."""
-    # Take last 20 characters
     last_20 = text[-20:]
 
-    # Extract [exit N] using regex
     match = re.search(r"\[exit (\d+)\]", last_20)
     if match:
         exit_code = int(match.group(1))
@@ -29,7 +27,6 @@ def _build_command_line(cmd_name: str, *args, **kwargs) -> list[str]:
     post_image_parts: list[str] = []
     positional_parts: list[str] = []
 
-    # Positional args are kept separate so command-specific ordering stays correct.
     for arg in args:
         if isinstance(arg, dict):
             for key, value in arg.items():
@@ -152,7 +149,6 @@ def _build_command_line(cmd_name: str, *args, **kwargs) -> list[str]:
     if "-c" in cmd_parts:
         idx = cmd_parts.index("-c")
         shell_cmd = " ".join(cmd_parts[idx + 1 :])
-        # Normalize accidental extra wrapper quotes, e.g. "'sleep 60s'".
         if len(shell_cmd) >= 2 and (
             (shell_cmd.startswith("'") and shell_cmd.endswith("'"))
             or (shell_cmd.startswith('"') and shell_cmd.endswith('"'))

@@ -1,10 +1,9 @@
+from typing import Any
 import uuid
-import json
 
 import pytest
 
-from pycontainer import docker
-from pycontainer.pycontainer import Container
+from pycontainers import docker
 
 
 @pytest.mark.asyncio
@@ -82,7 +81,7 @@ async def test_docker_run_with_env_and_instance_config_env():
     name = uuid.uuid4()
     runtime_envs = {"VAR1": "one", "VAR2": "two"}
     container = docker.run(
-        "alpine",
+        "postgres:18-alpine",
         name=name,
         detach=True,
         entrypoint="/bin/sh",
@@ -90,9 +89,11 @@ async def test_docker_run_with_env_and_instance_config_env():
         envs=runtime_envs,
     )
 
-    
     assert container.config.env["VAR1"] == "one"
     assert container.config.env["VAR2"] == "two"
+    assert container.config.env["PG_MAJOR"] == "18"
+    container_env_dict = dict[Any, Any](env.split("=") for env in container.config.env)
+    assert container_env_dict["VAR1"] == "one"
 
     container.kill()
     container.rm()
@@ -127,7 +128,6 @@ async def test_docker_run_with_volume():
         with open(host_file, "w") as f:
             f.write("hello from host")
 
-        # Mount the temporary directory to /data in the container
         container = docker.run(
             "alpine",
             name=name,
@@ -143,7 +143,6 @@ async def test_docker_run_with_volume():
         while time.time() < deadline and not os.path.exists(from_container_path):
             time.sleep(0.1)
 
-        # Check that the file written by the container exists
         assert os.path.exists(from_container_path)
         with open(from_container_path) as f:
             content = f.read()

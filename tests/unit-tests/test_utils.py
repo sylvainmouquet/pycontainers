@@ -1,4 +1,4 @@
-from pycontainer.utils import _build_command_line, get_exit_code, clean_result
+from pycontainers.shared.utilities import _build_command_line, clean_result, get_exit_code
 
 
 def test_build_command_line_simple():

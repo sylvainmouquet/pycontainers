@@ -33,10 +33,10 @@ jobs:
         working-directory: test
 
       - name: Add the dependency
-        run: uv add pycontainer
+        run: uv add pycontainers
         working-directory: test
 
       - name: Add the dependency
-        run: timeout 15 uv run python -m pycontainer.pycontainer
+        run: timeout 15 uv run python -c "from pycontainers import docker"
         working-directory: test
 

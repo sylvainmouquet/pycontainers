@@ -1,5 +1,5 @@
-from pycontainer import PyContainer
-from pycontainer.pycontainer import Container
+from pycontainers import PyContainers
+from pycontainers.features.docker import Container
 
 
 def test_model():
@@ -10,14 +10,14 @@ def test_model():
         "profile": {"age": 30, "city": "NYC"},
     }
 
-    container = Container(parent=PyContainer(), **user_data)
+    container = Container(parent=PyContainers(), **user_data)
     assert container.id == 1
     assert container.name == "Alice"
 
 
 def test_model_config_env_is_dict():
     container = Container(
-        parent=PyContainer(),
+        parent=PyContainers(),
         config={"env": ["var1=one", "var2=two", "empty"]},
     )
 
